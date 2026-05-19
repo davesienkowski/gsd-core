@@ -24,9 +24,10 @@ export type UatReason = {
   capturedValue?: string;
 };
 
-/** Regex to parse all UAT items regardless of result value. */
+/** Regex to parse all UAT items regardless of result value.
+ *  Accepts optional bold markers (**key:**) around expected/result keys. */
 const UAT_ITEM_PATTERN =
-  /###\s*(\d+)\.\s*([^\n]+)\nexpected:\s*([^\n]+)\nresult:\s*(\w+)/g;
+  /###\s*(\d+)\.\s*([^\n]+)\n(?:\*\*)?expected:(?:\*\*)?\s*([^\n]+)\n(?:\*\*)?result:(?:\*\*)?\s*(\w+)/g;
 
 interface UatItem {
   test: number;

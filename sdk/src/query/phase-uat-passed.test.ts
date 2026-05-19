@@ -243,4 +243,33 @@ result: pass
       await rm(localTmp, { recursive: true, force: true });
     }
   });
+
+  it('parses bold-prefixed **result:** key as equivalent to bare result:', async () => {
+    const localTmp = await mkdtemp(join(tmpdir(), 'gsd-uat-c9-'));
+    try {
+      const phaseDir = join(localTmp, '.planning', 'phases', '05-bold-key');
+      await mkdir(phaseDir, { recursive: true });
+      const content = `---
+status: complete
+phase: 5
+source: roadmap
+started: 2026-05-18T00:00:00Z
+updated: 2026-05-18T00:00:00Z
+---
+
+### 1. Bold-key item
+expected: thing
+**result:** pass
+`;
+      await writeFile(join(phaseDir, '05-HUMAN-UAT.md'), content);
+
+      const result = await isPhaseUatPassed(localTmp, '5');
+      expect(result.items.length).toBe(1);
+      expect(result.items[0].name).toBe('Bold-key item');
+      expect(result.items[0].result).toBe('pass');
+      expect(result.passed).toBe(true);
+    } finally {
+      await rm(localTmp, { recursive: true, force: true });
+    }
+  });
 });
