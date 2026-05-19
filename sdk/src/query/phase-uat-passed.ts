@@ -1,20 +1,40 @@
 /**
  * isPhaseUatPassed — SDK predicate answering "is phase N's UAT contract satisfied?"
  *
- * Cycle 1 of ~15 (walking skeleton): happy path only. No injection stripping,
- * no orphan detection, no human_verification frontmatter merge, no REASON_CODEs.
+ * Cycle 2 of ~15: introduces REASON_CODE frozen enum and UatReason typed shape.
+ * Non-pass items (result not literally 'pass') emit a typed NON_PASS_RESULT reason.
  */
 
 import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { resolvePhaseDir } from './phase-list-queries.js';
+
+export const REASON_CODE = Object.freeze({
+  NON_PASS_RESULT: 'non_pass_result',
+} as const);
+
+export type ReasonCode = typeof REASON_CODE[keyof typeof REASON_CODE];
+
+export type UatReason = {
+  code: ReasonCode;
+  file?: string;
+  itemName?: string;
+  capturedValue?: string;
+};
 
 /** Regex to parse all UAT items regardless of result value. */
 const UAT_ITEM_PATTERN =
   /###\s*(\d+)\.\s*([^\n]+)\nexpected:\s*([^\n]+)\nresult:\s*(\w+)/g;
 
-function parseAllUatItems(content: string): Record<string, unknown>[] {
-  const items: Record<string, unknown>[] = [];
+interface UatItem {
+  test: number;
+  name: string;
+  expected: string;
+  result: string;
+}
+
+function parseAllUatItems(content: string): UatItem[] {
+  const items: UatItem[] = [];
   UAT_ITEM_PATTERN.lastIndex = 0;
   let m: RegExpMatchArray | null;
   while ((m = UAT_ITEM_PATTERN.exec(content)) !== null) {
@@ -36,7 +56,7 @@ export async function isPhaseUatPassed(
   workstream?: string,
 ): Promise<{
   passed: boolean;
-  reasons: unknown[];
+  reasons: UatReason[];
   reasonsHuman: string[];
   items: Record<string, unknown>[];
 }> {
@@ -48,13 +68,28 @@ export async function isPhaseUatPassed(
   const files = await readdir(dir);
   const uatFiles = files.filter((f) => f.endsWith('-HUMAN-UAT.md'));
 
-  const items: Record<string, unknown>[] = [];
+  const items: UatItem[] = [];
+  const reasons: UatReason[] = [];
+
   for (const file of uatFiles) {
-    const content = await readFile(join(dir, file), 'utf-8');
-    items.push(...parseAllUatItems(content));
+    const filePath = join(dir, file);
+    const relFile = relative(projectDir, filePath);
+    const content = await readFile(filePath, 'utf-8');
+    const parsed = parseAllUatItems(content);
+    for (const item of parsed) {
+      items.push(item);
+      if (item.result !== 'pass') {
+        reasons.push({
+          code: REASON_CODE.NON_PASS_RESULT,
+          file: relFile,
+          itemName: item.name,
+          capturedValue: item.result,
+        });
+      }
+    }
   }
 
-  const passed = items.length > 0 && items.every((i) => i.result === 'pass');
+  const passed = items.length > 0 && reasons.length === 0;
 
-  return { passed, reasons: [], reasonsHuman: [], items };
+  return { passed, reasons, reasonsHuman: [], items };
 }
