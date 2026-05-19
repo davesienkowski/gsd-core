@@ -51,6 +51,7 @@ const UAT_ITEM_PATTERN =
   /###\s*(\d+)\.\s*([^\n]+)\n(?:\*\*)?expected:(?:\*\*)?\s*([^\n]+)\n(?:\*\*)?result:(?:\*\*)?\s*(\w+)/g;
 
 interface UatItem {
+  [key: string]: unknown;
   test: number;
   name: string;
   expected: string;
