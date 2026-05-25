@@ -13,6 +13,57 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
+const { tokenize } = require('./lib/git-cmd.js');
+
+function forceGitAddCwds(command, defaultCwd) {
+  const tokens = tokenize(command || '');
+  const separators = new Set(['&&', '||', ';', '|']);
+  const cwdList = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (path.basename(tokens[i]) !== 'git') continue;
+
+    let j = i + 1;
+    let gitCwd = defaultCwd;
+    while (j < tokens.length) {
+      const token = tokens[j];
+      const flagName = token.includes('=') ? token.slice(0, token.indexOf('=')) : token;
+      if (token === '-C' && tokens[j + 1]) {
+        gitCwd = path.resolve(gitCwd, tokens[j + 1]);
+        j += 2;
+        continue;
+      }
+      if (['-C', '--git-dir', '--work-tree'].includes(flagName) && !token.includes('=')) {
+        j += 2;
+        continue;
+      }
+      if (['--git-dir', '--work-tree', '--no-pager', '-p', '-P'].includes(flagName)) {
+        j++;
+        continue;
+      }
+      break;
+    }
+
+    if (tokens[j] !== 'add') continue;
+    for (let k = j + 1; k < tokens.length && !separators.has(tokens[k]); k++) {
+      if (tokens[k] === '--force' || tokens[k] === '-f' || /^-[A-Za-z]*f[A-Za-z]*$/.test(tokens[k])) {
+        cwdList.push(gitCwd);
+        break;
+      }
+    }
+  }
+  return cwdList;
+}
+
+function currentBranch(cwd) {
+  const result = spawnSync('git', ['branch', '--show-current'], {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (result.status !== 0) return '';
+  return result.stdout.trim();
+}
 
 let input = '';
 const stdinTimeout = setTimeout(() => process.exit(0), 3000);
@@ -23,6 +74,23 @@ process.stdin.on('end', () => {
   try {
     const data = JSON.parse(input);
     const toolName = data.tool_name;
+    const cwd = data.cwd || process.cwd();
+
+    if (toolName === 'Bash') {
+      const command = data.tool_input?.command || '';
+      for (const gitCwd of forceGitAddCwds(command, cwd)) {
+        const branch = currentBranch(gitCwd);
+        if (branch.startsWith('worktree-agent-')) {
+          process.stdout.write(JSON.stringify({
+            decision: 'block',
+            code: 'WORKTREE_AGENT_FORCE_ADD_FORBIDDEN',
+            reason: 'worktree-agent branches must not run git add -f or git add --force. Respect the SDK skipped_gitignored/skipped_commit_docs_false contract and leave gitignored files untracked.',
+          }));
+          process.exit(2);
+        }
+      }
+      process.exit(0);
+    }
 
     // Only guard Write and Edit tool calls
     if (toolName !== 'Write' && toolName !== 'Edit') {
@@ -58,7 +126,6 @@ process.stdin.on('end', () => {
     }
 
     // Check if workflow guard is enabled
-    const cwd = data.cwd || process.cwd();
     const configPath = path.join(cwd, '.planning', 'config.json');
     if (fs.existsSync(configPath)) {
       try {
