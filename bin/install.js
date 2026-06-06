@@ -8797,39 +8797,6 @@ function install(isGlobal, runtime = 'claude', options = {}) {
     rollback();
   };
 
-  if (isKimi && isGlobal) {
-    installRuntimeArtifacts(runtime, targetDir, 'global', _resolvedProfile);
-    const skillsDir = path.join(targetDir, 'skills');
-    const rootAgentPath = path.join(targetDir, 'agents', 'gsd.yaml');
-    const count = fs.existsSync(skillsDir)
-      ? fs.readdirSync(skillsDir, { withFileTypes: true })
-          .filter(e => e.isDirectory() && e.name.startsWith('gsd-')).length
-      : 0;
-    if (count > 0) {
-      console.log(`  ${green}✓${reset} Installed ${count} skills to skills/`);
-    } else {
-      throw new Error('Kimi global install produced no skills/gsd-* entries');
-    }
-    if (fs.existsSync(rootAgentPath)) {
-      console.log(`  ${green}✓${reset} Generated Kimi root agent: ${rootAgentPath}`);
-      console.log(`      Launch with: kimi --agent-file ${rootAgentPath}`);
-    } else {
-      throw new Error('Kimi global install produced no agents/gsd.yaml');
-    }
-    return {
-      runtime,
-      skipped: true,
-      reason: 'kimi_global_skills_and_agents',
-      configDir: targetDir,
-      agentPath: rootAgentPath,
-      settingsPath: null,
-      settings: null,
-      statuslineCommand: null,
-      updateBannerCommand: null,
-      rollbackInstallerMigrations,
-    };
-  }
-
   // Save any locally modified GSD files before they get wiped.
   // The pristine context lets saveLocalPatches populate gsd-pristine/ via
   // the install transform pipeline, giving the reapply-patches Step 5
@@ -9076,6 +9043,40 @@ function install(isGlobal, runtime = 'claude', options = {}) {
   }
   reportInstallerMigrationResult(installerMigrationResult);
   assertInstallerMigrationsUnblocked(installerMigrationResult);
+
+  if (isKimi && isGlobal) {
+    installRuntimeArtifacts(runtime, targetDir, 'global', _resolvedProfile);
+    const skillsDir = path.join(targetDir, 'skills');
+    const rootAgentPath = path.join(targetDir, 'agents', 'gsd.yaml');
+    const count = fs.existsSync(skillsDir)
+      ? fs.readdirSync(skillsDir, { withFileTypes: true })
+          .filter(e => e.isDirectory() && e.name.startsWith('gsd-')).length
+      : 0;
+    if (count > 0) {
+      console.log(`  ${green}✓${reset} Installed ${count} skills to skills/`);
+    } else {
+      throw new Error('Kimi global install produced no skills/gsd-* entries');
+    }
+    if (fs.existsSync(rootAgentPath)) {
+      console.log(`  ${green}✓${reset} Generated Kimi root agent: ${rootAgentPath}`);
+      console.log(`      Launch with: kimi --agent-file ${rootAgentPath}`);
+    } else {
+      throw new Error('Kimi global install produced no agents/gsd.yaml');
+    }
+    console.log(`\n  ${green}Done!${reset} Launch Kimi with ${cyan}kimi --agent-file ${rootAgentPath}${reset}.`);
+    return {
+      runtime,
+      skipped: true,
+      reason: 'kimi_global_skills_and_agents',
+      configDir: targetDir,
+      agentPath: rootAgentPath,
+      settingsPath: null,
+      settings: null,
+      statuslineCommand: null,
+      updateBannerCommand: null,
+      rollbackInstallerMigrations,
+    };
+  }
 
   // Artifact install dispatcher — routes to layout-driven path for all
   // skills-based runtimes (both full and minimal/core profiles); keeps
