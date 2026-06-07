@@ -12006,6 +12006,7 @@ module.exports = {
     normalizeAgentBodyForRuntime,
     yamlIdentifier,
     computePathPrefix,
+    applyRuntimeContentRewritesInPlace,
     getCodexSkillAdapterHeader,
     convertClaudeCommandToCursorSkill,
     convertClaudeCommandToCursorCommand,
