@@ -1,0 +1,25 @@
+{
+  "_comment": "AUDIT-SANDBOXED jscpd (copy-paste detector) config. Targets src/*.cts (the 83-file source of truth) and the prompt corpus. NEVER targets the gitignored compiled gsd-core/bin/lib/*.cjs (false-dup guard: source/artifact pairs would register as clones). NOT wired into the package devDeps/CI. Run from repo root: npx -y jscpd --config docs/audit/instrumentation/.jscpd.json",
+  "path": [
+    "src",
+    "gsd-core/workflows",
+    "gsd-core/references",
+    "agents",
+    "commands/gsd"
+  ],
+  "pattern": "**/*.{cts,md}",
+  "ignore": [
+    "**/gsd-core/bin/**",
+    "**/bin/lib/**",
+    "**/*.cjs",
+    "**/*.test.cts",
+    "**/node_modules/**"
+  ],
+  "format": ["typescript", "markdown"],
+  "minTokens": 50,
+  "minLines": 5,
+  "reporters": ["console", "json"],
+  "output": "docs/audit/instrumentation/.jscpd-report",
+  "absolute": false,
+  "gitignore": false
+}
