@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Adversarial Evidence Review — Newcomer-Readiness Fast-Track Milestone
 
 **Reviewer posture:** hostile red-team. Goal = falsify the producing streams' claims, not confirm them.

@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Token-Savings Quick-Win Stream (Phase 3)
 
 **Stream:** Token (Milestone 1, fast-track)
@@ -214,7 +216,7 @@ and name a **recall_gate** — never "delete this."
   severity: n/a
   citation: "gsd-core/workflows/execute-phase.md (21,527 tok), plan-phase.md (20,693 tok) vs the proven gsd-core/workflows/discuss-phase/modes/*.md lazy-load split"
   plan_only: true
-  recall_gate: "plan/execute edge-probe + verifier-reach harness — the edge-probe taxonomy and the plan-checker/verifier suite must pass identically on a fixture phase with mode-split vs monolithic workflows before adoption. Treat any drop in caught edges as a blocker. ⚠️ RE-PIN 2026-06-08: `gsd-core/references/edge-probe.md` is NOT on `next` (edge-probe PR #584/#550 unmerged) — the literal file citation is edge-probe-dependent. The recall-gate methodology (edge-case taxonomy) remains valid as a GATE NAME; the concrete edge-probe.md harness assumes that PR merges. Until then, use the plan-checker/verifier suite alone as the parity oracle."
+  recall_gate: "plan/execute edge-probe + verifier-reach harness — the edge-probe taxonomy and the plan-checker/verifier suite must pass identically on a fixture phase with mode-split vs monolithic workflows before adoption. Treat any drop in caught edges as a blocker. ⚠️ RE-PIN 2026-06-08: `gsd-core/references/edge-probe.md` is NOT on `next` (edge-probe PR unmerged upstream) — the literal file citation is edge-probe-dependent. The recall-gate methodology (edge-case taxonomy) remains valid as a GATE NAME; the concrete edge-probe.md harness assumes that PR merges. Until then, use the plan-checker/verifier suite alone as the parity oracle."
 
 - id: QW-TOK-07
   title: "De-duplicate the @~/.claude/gsd-core/references/mandatory-initial-read.md preamble handling across the 5 files that @-include it"

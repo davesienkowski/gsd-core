@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # GSD-Core Audit — `docs/audit/`
 
 > **Status:** Milestone 1 (Newcomer Readiness, fast-track) — setup phase complete.

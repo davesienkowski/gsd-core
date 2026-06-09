@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # GSD-Core Quick-Win Backlog — Newcomer Readiness (Milestone 1)
 
 **Converged:** 2026-06-07 (Phase 5 — Quick-Win Backlog Convergence & Publication)
@@ -114,7 +116,7 @@ worst-timed failure mode.
 | **QW-TOK-02** | NOT verbatim — 3 of the 8 `<documentation_lookup>` blocks carry a `command -v ctx7` supply-chain security guard + "Do NOT use `npx --yes`" warning the others lack | factor-out preserving the guarded variant, never collapse to `npx --yes` | **ctx7-guard parity harness** — md5/diff all 8 blocks before & after; executor/planner/phase-researcher MUST retain the `command -v ctx7` guard + warning; collapsing to the `npx --yes` form is a supply-chain regression and a blocker |
 | **QW-TOK-04** | The `description` IS the routing signal a model reads to pick an agent | tighten, not cut | **agent-routing recall harness** — A/B an ambiguous task → agent selection (prohibition-elicitation style); each trimmed description must still route to the correct agent before the cut lands |
 | **QW-TOK-05** | The inlined Step 0/1/config-gate text is load-bearing graphify orchestration | relocate verbatim, never delete | **graphify behavior-equivalence harness** — run `/gsd-graphify build\|query\|status\|diff` before & after; config-gate STOP branches must fire identically |
-| **QW-TOK-06** | Every branch is load-bearing plan/execute orchestration | restructure, never delete | **plan/execute edge-probe + verifier-reach harness** — edge-probe taxonomy + plan-checker/verifier suite must pass identically on a fixture phase, mode-split vs monolithic; any drop in caught edges is a blocker. ⚠️ **edge-probe-dependent:** `gsd-core/references/edge-probe.md` (and `src/edge-probe.cts`) are **NOT on `next`** (edge-probe PR #584/#550 unmerged). The recall-gate *methodology* is a valid gate name; the concrete edge-probe.md/edge-probe.cts harness assumes that PR merges. Until then, use the plan-checker/verifier suite alone as the parity oracle. |
+| **QW-TOK-06** | Every branch is load-bearing plan/execute orchestration | restructure, never delete | **plan/execute edge-probe + verifier-reach harness** — edge-probe taxonomy + plan-checker/verifier suite must pass identically on a fixture phase, mode-split vs monolithic; any drop in caught edges is a blocker. ⚠️ **edge-probe-dependent:** `gsd-core/references/edge-probe.md` (and `src/edge-probe.cts`) are **NOT on `next`** (edge-probe PR unmerged upstream). The recall-gate *methodology* is a valid gate name; the concrete edge-probe.md/edge-probe.cts harness assumes that PR merges. Until then, use the plan-checker/verifier suite alone as the parity oracle. |
 | **QW-UX-08** | Edits command-file frontmatter/body prose that ships to the runtime | clarify copy, never hide/delete | **`lint:descriptions` (≤100 char) + `lint:skill-deps` closure** — confirm no ns-\* `requires`/closure breaks before any copy change; ns-\* still dispatch identically |
 
 > **The remaining prompt-corpus items are `mechanical`** (QW-TOK-01, -03, -07): formatting,
@@ -316,7 +318,7 @@ worst-timed failure mode.
   severity: n/a
   citation: "gsd-core/workflows/execute-phase.md (21,527 tok), plan-phase.md (20,693 tok) vs discuss-phase/modes/*.md lazy-load split"
   plan_only: true
-  recall_gate: "plan/execute edge-probe + verifier-reach harness — edge-probe taxonomy + plan-checker/verifier suite must pass identically (mode-split vs monolithic) on a fixture phase; any drop in caught edges is a blocker. ⚠️ RE-PIN 2026-06-08 — edge-probe-dependent: `gsd-core/references/edge-probe.md` and `src/edge-probe.cts` are NOT on next (edge-probe PR #584/#550 unmerged). The recall-gate METHODOLOGY (edge-case taxonomy) is a valid gate name; the concrete edge-probe.md harness assumes that PR merges. Until then, use the plan-checker/verifier suite alone as the parity oracle."
+  recall_gate: "plan/execute edge-probe + verifier-reach harness — edge-probe taxonomy + plan-checker/verifier suite must pass identically (mode-split vs monolithic) on a fixture phase; any drop in caught edges is a blocker. ⚠️ RE-PIN 2026-06-08 — edge-probe-dependent: `gsd-core/references/edge-probe.md` and `src/edge-probe.cts` are NOT on next (edge-probe PR unmerged upstream). The recall-gate METHODOLOGY (edge-case taxonomy) is a valid gate name; the concrete edge-probe.md harness assumes that PR merges. Until then, use the plan-checker/verifier suite alone as the parity oracle."
 
 - id: QW-TOK-07
   title: "Lock the mandatory-initial-read.md include against drift across the 5 files that @-include it"
@@ -464,7 +466,7 @@ agents); `gsd-planner.md:3` (uncapped description); `graphify.md:11` (STOP banne
 ### (c) Edge-probe-dependent items flagged (not on `next`)
 
 - **QW-TOK-06 recall_gate** cited `gsd-core/references/edge-probe.md`. That file — and
-  `src/edge-probe.cts` — are **NOT on `next`** (edge-probe PR #584/#550 unmerged). Flagged in
+  `src/edge-probe.cts` — are **NOT on `next`** (edge-probe PR unmerged upstream). Flagged in
   both the EXECUTION-RISK table and the YAML: the recall-gate *methodology* (edge-case taxonomy)
   remains a valid gate NAME, but the concrete edge-probe.md/edge-probe.cts harness assumes that PR
   merges. Until then, the plan-checker/verifier suite alone is the parity oracle. (References to
