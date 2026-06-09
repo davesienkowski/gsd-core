@@ -1,0 +1,39 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/gsd-tools.cts",
+    "src/install.cts",
+    "src/command-routing-hub.cts",
+    "src/cjs-command-router-adapter.cts",
+    "src/*-command-router.cts",
+    "src/installer-migrations.cts",
+    "src/installer-migrations/*.cts",
+    "src/installer-migration-authoring.cts",
+    "src/installer-migration-report.cts",
+    "src/runtime-artifact-layout.cts",
+    "src/runtime-homes.cts",
+    "src/runtime-slash.cts",
+    "src/runtime-config-adapter-registry.cts",
+    "src/runtime-name-policy.cts",
+    "src/profile-pipeline.cts",
+    "src/command-aliases.cts",
+    "src/commands.cts",
+    "src/observability/logger.cts",
+    "src/observability/event.cts"
+  ],
+  "project": [
+    "src/**/*.cts"
+  ],
+  "ignore": [
+    "gsd-core/**",
+    "bin/**",
+    "**/*.cjs",
+    "**/*.d.cts",
+    "**/*.test.cts",
+    "tests/**"
+  ],
+  "ignoreBinaries": [],
+  "ignoreDependencies": [],
+  "includeEntryExports": true,
+  "treatConfigHintsAsErrors": false
+}

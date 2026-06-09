@@ -1,0 +1,26 @@
+{
+  "_comment": "PHASE-7 (METHOD-02) AUDIT-SANDBOXED jscpd (copy-paste detector) config. Deep extension of M1 docs/audit/instrumentation/.jscpd.json. Targets src/*.cts (the source of truth) AND the full prompt corpus (workflows, references, agents, commands). NEVER targets the gitignored compiled gsd-core/bin/lib/*.cjs (false-dup guard: source/artifact .cts<->.cjs pairs would register as 100% clones). NOT wired into the package devDeps/CI (D-01). Run from repo root: npx -y jscpd --config docs/audit/comprehensive/instrumentation/.jscpd.json",
+  "path": [
+    "src",
+    "gsd-core/workflows",
+    "gsd-core/references",
+    "agents",
+    "commands/gsd"
+  ],
+  "pattern": "**/*.{cts,md}",
+  "ignore": [
+    "**/gsd-core/bin/**",
+    "**/bin/lib/**",
+    "**/*.cjs",
+    "**/*.d.cts",
+    "**/*.test.cts",
+    "**/node_modules/**"
+  ],
+  "format": ["typescript", "markdown"],
+  "minTokens": 50,
+  "minLines": 5,
+  "reporters": ["console", "json"],
+  "output": "docs/audit/comprehensive/instrumentation/reports/jscpd",
+  "absolute": false,
+  "gitignore": false
+}

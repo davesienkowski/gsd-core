@@ -1,0 +1,9 @@
+{
+  "_comment": "PHASE-7 (METHOD-02) AUDIT-SANDBOXED madge config. Module-graph + circular-dependency detection over src/*.cts. NEVER targets compiled gsd-core/bin/lib/*.cjs (ADR-457). NOT wired into the package (D-01). Run from repo root: npx -y madge --circular --extensions cts src ; and: npx -y madge --json --extensions cts src > docs/audit/comprehensive/instrumentation/reports/madge-graph.json ; orphans: npx -y madge --orphans --extensions cts src. NB madge follows static require/import only; readdirSync migration loading + string-keyed router dispatch are INVISIBLE to it — cross-check orphans against DYNAMIC-INDIRECTION.md.",
+  "fileExtensions": ["cts"],
+  "tsConfig": "tsconfig.build.json",
+  "detectiveOptions": {
+    "ts": { "skipTypeImports": false }
+  },
+  "excludeRegExp": ["\\.test\\.cts$", "\\.d\\.cts$", "node_modules", "gsd-core", "^bin/"]
+}
