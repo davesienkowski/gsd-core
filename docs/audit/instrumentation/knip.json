@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "_comment": "AUDIT-SANDBOXED knip config. Scoped to the src/*.cts TypeScript source of truth (83 files). NEVER targets the gitignored compiled gsd-core/bin/lib/*.cjs (ADR-457 build-at-publish) — analyzing build output produces false bloat. NOT wired into the package devDeps/CI. Run from repo root: npx -y knip --config docs/audit/instrumentation/knip.json",
+  "entry": [
+    "src/gsd-tools.cts",
+    "src/install.cts",
+    "src/*-router.cts",
+    "src/command-routing-hub.cts",
+    "src/installer-migrations.cts",
+    "src/runtime-artifact-layout.cts",
+    "src/profile-pipeline.cts"
+  ],
+  "project": [
+    "src/**/*.cts"
+  ],
+  "ignore": [
+    "gsd-core/**",
+    "bin/**",
+    "**/*.cjs",
+    "**/*.test.cts",
+    "tests/**"
+  ],
+  "ignoreBinaries": [],
+  "ignoreDependencies": [],
+  "includeEntryExports": true,
+  "treatConfigHintsAsErrors": false
+}
