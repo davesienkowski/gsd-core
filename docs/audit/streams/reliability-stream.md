@@ -46,13 +46,14 @@ guard demands.
 the config is unparseable, returns the built-in `defaults` with **no stderr warning**:
 
 ```
-src/core.cts:544   } catch {
-src/core.cts:546     if (fs.existsSync(planningDir(cwd, ws))) {
-src/core.cts:551       return defaults;          // ← silent: user's real config is discarded
+src/core.cts:545   } catch {                                     # re-pinned to next 2026-06-08 (was 544)
+src/core.cts:547     if (fs.existsSync(planningDir(cwd, ws))) {
+src/core.cts:552       return defaults;          // ← silent: user's real config is discarded
 ```
 
 By contrast, `config-get` / `config-set` correctly **error and exit 1** on the same malformed
-file (`src/config.cts:417`, `CONFIG_PARSE_FAILED`). So two code paths disagree on the same file,
+file (`src/config.cts:639` config-get / `:429` config-set, `CONFIG_PARSE_FAILED` — re-pinned
+to next 2026-06-08; was `:417`). So two code paths disagree on the same file,
 and the one on the hot path (every workflow reads config via `loadConfig`) is the one that
 hides the problem.
 
@@ -76,7 +77,7 @@ a model profile, or security settings) and makes one typo gets **silently downgr
 and ignored settings on every command** — with `state load` reporting clean success. The
 result looks right and is wrong. **Quick-win:** add a single `process.stderr.write(...)` warning
 in the `loadConfig` catch when the file exists-but-failed-to-parse (mirroring the existing
-unknown-key warning at `core.cts:455`), so the silent fallback announces itself. (Fixing the
+unknown-key warning at `core.cts:456` — re-pinned to next 2026-06-08; was `:455`), so the silent fallback announces itself. (Fixing the
 divergence to *error* like `config-get` is a larger behavior change → noted for Phase 13.)
 
 ### C-02 — Non-Latin / all-symbol names produce an empty slug and a malformed phase dir — **MED**
@@ -85,13 +86,13 @@ divergence to *error* like `config-get` is a larger behavior change → noted fo
 **input**, not empty **output**:
 
 ```
-src/core.cts:1863  function generateSlugInternal(text) {
-src/core.cts:1864    if (!text) return null;                                   // guards empty INPUT only
-src/core.cts:1865    return text.toLowerCase().replace(/[^a-z0-9]+/g,'-')...    // non-Latin → '' OUTPUT
+src/core.cts:1919  function generateSlugInternal(text) {                       # re-pinned to next 2026-06-08 (was 1863)
+src/core.cts:1920    if (!text) return null;                                   // guards empty INPUT only
+src/core.cts:1921    return text.toLowerCase().replace(/[^a-z0-9]+/g,'-')...    // non-Latin → '' OUTPUT
 ```
 
 The `generate-slug` command surfaces this directly, and `scaffold phase-dir` consumes it into a
-directory name (`src/commands.cts:1164,1169`).
+directory name (`src/commands.cts:1166,1171` — re-pinned to next 2026-06-08; was `1164,1169`).
 
 **Reproduction (run 2026-06-07):**
 ```bash
@@ -163,7 +164,7 @@ grep -A2 '"engines"' package.json                 # → node: ">=22.0.0"
 grep -niE 'node.?js 18|v18' docs/how-to/install-on-your-runtime.md docs/tutorials/your-first-project.md
 # → install-on-your-runtime.md:5  "Node.js 18+ and npm (or npx)"
 # → your-first-project.md:15      "Node.js 18 or later — node --version should print v18.x.x or higher"
-grep -rliE 'node.?js 18' docs/ | grep -v review    # → ~15 doc files (en + ja-JP/ko-KR/pt-BR/zh-CN translations)
+grep -rliE 'node.?js 18' docs/ | grep -v review    # → 18 doc files on next (re-pinned 2026-06-08; was ~15) (en + ja-JP/ko-KR/pt-BR/zh-CN translations)
 grep -niE 'process\.version|EBADENGINE|engine-strict' bin/install.js   # → none
 ls .npmrc                                          # → not present
 ```
@@ -192,7 +193,7 @@ full per-runtime engine-compat sweep stays a Phase-13 concern (H-04).
   runtime_blast_radius: all-14+    # loadConfig is on every runtime's hot path
   mechanical_vs_instructional: n/a # engine code, not prompt corpus
   severity: high
-  citation: "src/core.cts:544-551 (silent fallback) vs src/config.cts:417 (errors); repro in §2 C-01"
+  citation: "src/core.cts:545-552 (silent fallback) vs src/config.cts:639 config-get / :429 config-set (errors); repro in §2 C-01"   # re-pinned to next 2026-06-08 (was core 544-551, config 417)
   plan_only: true
   recall_gate: n/a
 
@@ -208,7 +209,7 @@ full per-runtime engine-compat sweep stays a Phase-13 concern (H-04).
   runtime_blast_radius: all-14+    # slug + phase scaffolding is runtime-agnostic
   mechanical_vs_instructional: n/a
   severity: med
-  citation: "src/core.cts:1863-1865; consumed at src/commands.cts:1164,1169; repro in §2 C-02"
+  citation: "src/core.cts:1919-1921; consumed at src/commands.cts:1166,1171; repro in §2 C-02"   # re-pinned to next 2026-06-08 (was core 1863-1865, commands 1164,1169)
   plan_only: true
   recall_gate: n/a
 
@@ -295,8 +296,8 @@ deferred to Phase 13 rather than jammed into the fast-track:
 
 | ID | Type | Citation |
 |---|---|---|
-| C-01 | repro + file:line | `src/core.cts:544-551`; `src/config.cts:417`; §2 repro |
-| C-02 | repro + file:line | `src/core.cts:1863-1865`; `src/commands.cts:1164,1169`; §2 repro |
+| C-01 | repro + file:line | `src/core.cts:545-552`; `src/config.cts:639` (config-get) / `:429` (config-set); §2 repro — re-pinned to next 2026-06-08 |
+| C-02 | repro + file:line | `src/core.cts:1919-1921`; `src/commands.cts:1166,1171`; §2 repro — re-pinned to next 2026-06-08 |
 | C-03 | repro (exit codes) | direct exit-code capture, §2 table |
 | C-04 | file:line | `src/drift.cts:252-255, 259-270` |
 | C-05 | file:line + repro | `package.json` engines `>=22.0.0`; `docs/how-to/install-on-your-runtime.md:5`; `docs/tutorials/your-first-project.md:15` (+4 translations); no guard in `bin/install.js`; no `.npmrc` (added by adversarial review H-1) |

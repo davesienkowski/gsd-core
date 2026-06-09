@@ -39,7 +39,8 @@ install guide (`docs/how-to/install-on-your-runtime.md`) — both exist (verifie
   "profile|minimal|surface" README.md` → **no matches**. A newcomer cannot make an
   informed "how much am I installing?" choice from the landing page.
   *Evidence:* `README.md` Quickstart (lines ~34–52, no profile mention); contrast
-  `bin/install.js:686` `--help` text which documents `core / standard / full`.
+  `bin/install.js:583` `--help` text which documents `core / standard / full`
+  (re-pinned to next 2026-06-08; was `:686`).
 
 ### Stage 1 — Install (`npx @opengsd/gsd-core@latest`)
 
@@ -55,11 +56,12 @@ to the **`full`** profile by default.
   (8 skills) and `standard` (15 skills) profiles exist and are fully wired — but a
   newcomer must already *know* to pass `--profile=core` on the CLI to get them. There is
   no interactive "Which profile? [core / standard / full]" prompt.
-  *Evidence:* `src/install-profiles.cts:443-451` (`resolveEffectiveProfile` default
-  branch); `bin/install.js:8311-8316` (call site, no interactive profile prompt — the
-  only profile inputs are the `--profile=`/`--minimal` flags parsed at
-  `bin/install.js:264-281`); `bin/install.js:686` help text:
-  *"full — all 66 skills (default)"*.
+  *Evidence:* `src/install-profiles.cts:499-506` (`resolveEffectiveProfile` default
+  branch — re-pinned to next 2026-06-08; was `:443-451`); `bin/install.js` call site has
+  no interactive profile prompt — the only profile inputs are the `--profile=`/`--minimal`
+  flags parsed at `bin/install.js:371-376` (re-pinned to next; was `264-281`); `bin/install.js:583`
+  help text now reads *"full — all skills (default)"* (re-pinned to next; was `:686` *"all 66 skills"* —
+  the "66" hard-coded number was removed on next; see F-04).
 
 - **F-03 — Cold-start token cost of the default is real and unflagged to the newcomer.**
   The installer's own `--help` text states the `core` profile *"Cuts cold-start overhead
@@ -67,28 +69,34 @@ to the **`full`** profile by default.
   of always-on system-prompt description on every session. The newcomer pays this without
   being told it is optional. (Token *quantification* is Stream B's job; this is the
   **UX/discoverability** facet: the choice is hidden.)
-  *Evidence:* `bin/install.js:686` (`--minimal ... Cuts cold-start overhead from ~12k
-  tokens to ~700`).
+  *Evidence:* `bin/install.js:583` (`--minimal ... Cuts cold-start overhead from ~12k
+  tokens to ~700` — re-pinned to next 2026-06-08; was `:686`).
 
-- **F-04 — The installer's own profile counts are stale — three of them in one `--help` block.**
-  The `--help` text says *"full — all 66 skills"* (`ls commands/gsd/*.md | wc -l` → **67**),
-  *"core — 7 main-loop skills"* (live `core` array = **8**, `src/install-profiles.cts:28-37`),
-  and *"standard — ~13 skills"* (live `standard` array = **14**, `src/install-profiles.cts:38-56`).
-  Minor individually, but three off-by-ones in the same string a newcomer reads erodes first-touch
-  trust. QW-UX-03 fixes all three (and recommends deriving them programmatically).
-  *Evidence:* `bin/install.js:686` (`66`/`7`/`~13`); live `commands/gsd/*.md` = 67;
-  `src/install-profiles.cts:28-37` core = 8; `:38-56` standard = 14.
+- **F-04 — [LARGELY RESOLVED ON `next` — re-pin 2026-06-08]** This finding was measured against
+  `feat/non-inferable-pipeline`, where the `--help` text hard-coded three stale counts
+  (*"full — all 66 skills"*, *"core — 7 main-loop skills"*, *"standard — ~13 skills"*). **On clean
+  `next`, the help text at `bin/install.js:583` was already rewritten to derive the counts
+  programmatically** — it now reads
+  `core — ${PROFILES.core.length} main-loop skills incl. phase (~130 desc tokens)`,
+  `standard — ${PROFILES.standard.length} skills incl. phase, review, config (~700)`, and
+  `full — all skills (default)` (no "66" number at all). So `core`/`standard` can no longer drift,
+  and the `full` number is gone. **The defect QW-UX-03 was written to fix no longer exists on `next`.**
+  The live arrays are still `src/install-profiles.cts:28-37` core = **8** and `:38-56` standard = **14**
+  (unchanged), and the live `commands/gsd/*.md` count is **67** — so the *facts* still hold, but the
+  stale-string instance is gone. **QW-UX-03 should be re-scoped or closed** (see backlog re-pin note).
+  *Evidence:* `bin/install.js:583` (now derives `PROFILES.core.length` / `PROFILES.standard.length`,
+  "full — all skills"); `src/install-profiles.cts:28-37` core = 8; `:38-56` standard = 14; live 67.
 
 ### Stage 2 — Post-install signpost (the "Done!" message)
 
 After install, the user sees a single next-step line. For Claude global:
 
 > `Done! Restart Claude Code, then in any directory either type /gsd-new-project or ask
-> Claude to run the gsd-new-project skill.`  — `bin/install.js:10263`
+> Claude to run the gsd-new-project skill.`  — `bin/install.js:11866` (re-pinned to next 2026-06-08; was `:10263`)
 
 For all other targets:
 
-> `Done! Open a blank directory in <program> and run /gsd-new-project.` — `bin/install.js:10271`
+> `Done! Open a blank directory in <program> and run /gsd-new-project.` — `bin/install.js:11874` (re-pinned to next 2026-06-08; was `:10271`)
 
 This is a good single next step. Two gaps:
 
@@ -96,8 +104,9 @@ This is a good single next step. Two gaps:
   to `/gsd-help` (the curated one-page tour) or mention that the surface can be slimmed.**
   A newcomer who just got 67 commands has no in-terminal signpost to (a) orient
   (`/gsd-help`) or (b) reduce the surface (`/gsd-surface profile core`). The only pointer
-  is `/gsd-new-project` and a Discord link (`bin/install.js:10265,10273`).
-  *Evidence:* `bin/install.js:10262-10274` (both "Done!" branches).
+  is `/gsd-new-project` and a Discord link (`bin/install.js:11868,11876`).
+  *Evidence:* `bin/install.js:11864-11877` (both "Done!" branches — re-pinned to next 2026-06-08;
+  was `10262-10274` / `10265,10273`).
 
 - **F-06 — The tutorial's promised install output does not match the real installer
   output (doc/code drift on the newcomer's very first screen).**
@@ -108,12 +117,12 @@ This is a good single next step. Two gaps:
   ✓ GSD Core ready — run /gsd-new-project to start
   ```
   The real installer prints `✓ Installed <count> commands to commands/gsd/`
-  (`bin/install.js:8775`) and ends with `Done! ... run /gsd-new-project`
-  (`bin/install.js:10271`) — **not** "GSD Core ready". The tutorial also claims **"86
+  (`bin/install.js:10111`) and ends with `Done! ... run /gsd-new-project`
+  (`bin/install.js:11874`) — **not** "GSD Core ready". The tutorial also claims **"86
   skills"** while the live count is **67**. A first-timer comparing the doc to their
   screen sees a mismatch on step 1.
-  *Evidence:* `docs/tutorials/your-first-project.md:36-40` vs `bin/install.js:8775,10271`;
-  live `commands/gsd/*.md` count = 67.
+  *Evidence:* `docs/tutorials/your-first-project.md:36-40` vs `bin/install.js:10111,11874`
+  (re-pinned to next 2026-06-08; was `8775,10271`); live `commands/gsd/*.md` count = 67.
 
 ### Stage 3 — First command (`/gsd-new-project` → first result)
 
@@ -169,10 +178,10 @@ disclosure**, never deletion; safety/recovery commands are **criticality-exempt*
   runtime_blast_radius: all-14+    # installer serves every runtime
   mechanical_vs_instructional: n/a # installer code, not prompt-corpus
   severity: n/a
-  citation: "src/install-profiles.cts:443-451 (default→full); bin/install.js:8311-8316 (no interactive profile prompt)"
+  citation: "src/install-profiles.cts:499-506 (default→full); bin/install.js call site has no interactive profile prompt (flags parsed at bin/install.js:371-376)"   # re-pinned to next 2026-06-08 (was install-profiles 443-451; bin 8311-8316/264-281)
   plan_only: true
   recall_gate: n/a
-  power_user_impact: "None on flag/CI installs — prompt MUST be skipped when --profile/--minimal is passed or stdin is non-TTY (installer already gates the runtime prompt on isTTY, bin/install.js:8599). Power users keep flag-driven installs unchanged; marker still persisted."
+  power_user_impact: "None on flag/CI installs — prompt MUST be skipped when --profile/--minimal is passed or stdin is non-TTY (installer already gates the runtime prompt on isTTY, bin/install.js:12127 — re-pinned to next; was :8599). Power users keep flag-driven installs unchanged; marker still persisted."
 
 - id: QW-UX-02
   title: "Document the profile choice in the README Quickstart and install-on-your-runtime guide"
@@ -186,7 +195,7 @@ disclosure**, never deletion; safety/recovery commands are **criticality-exempt*
   runtime_blast_radius: none       # docs only
   mechanical_vs_instructional: n/a
   severity: n/a
-  citation: "README.md Quickstart (no profile mention; grep -niE 'profile|surface' README.md → 0 hits); bin/install.js:686 (--profile help text exists)"
+  citation: "README.md Quickstart (no profile mention; grep -niE 'profile|surface' README.md → 0 hits); bin/install.js:583 (--profile help text exists)"   # re-pinned to next 2026-06-08 (was :686)
   plan_only: true
   recall_gate: n/a
   power_user_impact: "Pure addition — power users already know the flags; a short callout does not change their path."
@@ -203,10 +212,11 @@ disclosure**, never deletion; safety/recovery commands are **criticality-exempt*
   runtime_blast_radius: none       # help text only
   mechanical_vs_instructional: n/a
   severity: n/a
-  citation: "bin/install.js:686 — 'full — all 66 skills' (live commands/gsd/*.md = 67); 'core — 7 main-loop skills' (src/install-profiles.cts:28-37 core array = 8); 'standard — ~13 skills' (src/install-profiles.cts:38-56 standard array = 14)"
+  citation: "RE-PIN 2026-06-08 — LARGELY RESOLVED ON next: bin/install.js:583 already derives counts (`PROFILES.core.length` / `PROFILES.standard.length`) and 'full — all skills' has no number. The three hard-coded stale counts (66/7/~13) existed on feat (was bin/install.js:686) but are GONE on next. Live facts still: commands/gsd/*.md = 67; src/install-profiles.cts:28-37 core = 8; :38-56 standard = 14."
   plan_only: true
   recall_gate: n/a
-  power_user_impact: "None. Three stale counts live in the same --help string (full 66→67, core 7→8, standard ~13→14). Consider deriving the counts programmatically from install-profiles so they cannot drift again (note for executor)."
+  status_on_next: "OBSOLETE/RE-SCOPE — the stale-count instance this fixes no longer exists on next; the executor's own 'derive programmatically' recommendation was already implemented. Close or re-scope to a drift-lock test."
+  power_user_impact: "None. (Was: three stale counts in one --help string; now derived programmatically on next.)"
 
 - id: QW-UX-04
   title: "Reconcile the tutorial's claimed install output with the real installer output"
@@ -220,7 +230,7 @@ disclosure**, never deletion; safety/recovery commands are **criticality-exempt*
   runtime_blast_radius: none       # docs only
   mechanical_vs_instructional: n/a
   severity: n/a
-  citation: "docs/tutorials/your-first-project.md:36-40 ('86 skills' + 'GSD Core ready') vs bin/install.js:8775,10271 (real strings); live count 67"
+  citation: "docs/tutorials/your-first-project.md:36-40 ('86 skills' + 'GSD Core ready') vs bin/install.js:10111,11874 (real strings) — re-pinned to next 2026-06-08 (was 8775,10271); live count 67"
   plan_only: true
   recall_gate: n/a
   power_user_impact: "None — power users skip the tutorial."
@@ -237,7 +247,7 @@ disclosure**, never deletion; safety/recovery commands are **criticality-exempt*
   runtime_blast_radius: all-14+    # both 'Done!' branches serve every runtime
   mechanical_vs_instructional: n/a # installer output, not a shipped prompt
   severity: n/a
-  citation: "bin/install.js:10262-10274 (both 'Done!' branches point only at /gsd-new-project + Discord)"
+  citation: "bin/install.js:11864-11877 (both 'Done!' branches point only at /gsd-new-project + Discord) — re-pinned to next 2026-06-08 (was 10262-10274)"
   plan_only: true
   recall_gate: n/a
   power_user_impact: "Negligible — one extra line. Keep it to ≤2 lines so it does not bury the primary /gsd-new-project step."
@@ -254,10 +264,10 @@ disclosure**, never deletion; safety/recovery commands are **criticality-exempt*
   runtime_blast_radius: all-14+
   mechanical_vs_instructional: n/a
   severity: n/a
-  citation: "src/install-profiles.cts:38-56 (standard set) + :443-451 (current default = full)"
+  citation: "src/install-profiles.cts:38-56 (standard set) + :499-506 (current default = full) — re-pinned to next 2026-06-08 (default was 443-451)"
   plan_only: true
   recall_gate: n/a
-  power_user_impact: "MUST preserve full via flag/marker; existing installs keep their marker (resolveEffectiveProfile honors a non-full marker, src/install-profiles.cts:447-448). NOTE: changing the bare default is a behavior change — recommend shipping ONLY behind the interactive prompt (QW-UX-01) so non-interactive/CI installs keep 'full' back-compat. Do NOT silently flip the non-interactive default."
+  power_user_impact: "MUST preserve full via flag/marker; existing installs keep their marker (resolveEffectiveProfile honors a non-full marker, src/install-profiles.cts:503-504 — re-pinned to next; was 447-448). NOTE: changing the bare default is a behavior change — recommend shipping ONLY behind the interactive prompt (QW-UX-01) so non-interactive/CI installs keep 'full' back-compat. Do NOT silently flip the non-interactive default."
 
 - id: QW-UX-07
   title: "Tier the slash-menu surface so the 6 core-loop commands read as 'start here' (progressive disclosure)"

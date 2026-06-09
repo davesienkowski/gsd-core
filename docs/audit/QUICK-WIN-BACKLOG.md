@@ -34,7 +34,7 @@ plan-only. Pick top-down — each is independently shippable and safe before a t
 | 5 | **QW-UX-04** | Reconcile the tutorial's claimed install output with the real installer output | **75** | S | none | UX | UX/Onboarding |
 | 6 | **QW-TOK-01** | Strip the dead commented-out PostToolUse hooks stub from 24 agent frontmatters | **75** | S | all-14+ | Token (mechanical) | Token |
 | 7 | **QW-UX-01** | Add an interactive profile prompt to the installer (core/standard/full) | **75** | M | all-14+ | UX + Token | bin-subsystem |
-| 8 | **QW-UX-03** | Fix all 3 stale counts in the installer `--help` text (`66`→67, core `7`→8, standard `~13`→14) | **50** | S | none | UX | bin-subsystem |
+| 8 | **QW-UX-03** | Fix stale counts in installer `--help` text — **LARGELY RESOLVED on `next`** (counts now derived from `PROFILES.*.length`; re-scope/close) | **50** | S | none | UX | bin-subsystem |
 
 **Spotlight-eve shortlist (the lowest-runtime-risk first picks):**
 **QW-UX-02, QW-UX-04, QW-UX-03** (docs/help-text only — `blast: none`) plus **QW-TOK-01**
@@ -81,20 +81,20 @@ names its `recall_gate`. Stream IDs are preserved as provenance.
 
 | ID | Title | Stream(s) | I | C | E | **ICE** | Size | Product | Blast | Mech/Instr | Sev | Owner | Citation |
 |----|-------|-----------|--:|--:|--:|--------:|------|---------|-------|------------|-----|-------|----------|
-| **QW-UX-02** | Document the profile choice in README Quickstart + runtime guide | UX | 4 | 5 | 5 | **100** | S | UX | none | n/a | n/a | UX/Onboarding | `README.md` Quickstart (0 profile hits); `bin/install.js:686` |
-| **QW-REL-01** | Warn (don't silently default) when `config.json` fails to parse | Reliability | 5 | 5 | 4 | **100** | S | Reliability | all-14+ | n/a | **high** | core.cts | `src/core.cts:544-551` vs `src/config.cts:417`; repro C-01 |
-| **QW-REL-05** | Resolve Node-version contradiction (docs say 18+, package needs ≥22) + add `process.version` guard | Reliability + **UX** | 5 | 5 | 4 | **100** | S | Reliability | all-14+ | n/a | **high** | core.cts / bin | `package.json engines '>=22'` vs docs `Node 18+` (install-on-your-runtime.md:5, your-first-project.md:15, +4 translations); no install guard |
-| **QW-REL-02** | Never emit an empty slug — fall back / warn on `''` sanitization | Reliability | 4 | 5 | 4 | **80** | S | Reliability | all-14+ | n/a | **med** | core.cts | `src/core.cts:1863-1865`; `src/commands.cts:1164,1169`; repro C-02 |
-| **QW-UX-01** | Add interactive profile prompt to the installer (core/standard/full) | UX + **Token** | 5 | 5 | 3 | **75** | M | UX | all-14+ | n/a | n/a | bin-subsystem | `src/install-profiles.cts:443-451`; `bin/install.js:8311-8316` |
-| **QW-UX-04** | Reconcile tutorial's claimed install output with real installer output | UX | 3 | 5 | 5 | **75** | S | UX | none | n/a | n/a | UX/Onboarding | `docs/tutorials/your-first-project.md:36-40` vs `bin/install.js:8775,10271` |
+| **QW-UX-02** | Document the profile choice in README Quickstart + runtime guide | UX | 4 | 5 | 5 | **100** | S | UX | none | n/a | n/a | UX/Onboarding | `README.md` Quickstart (0 profile hits); `bin/install.js:583` |
+| **QW-REL-01** | Warn (don't silently default) when `config.json` fails to parse | Reliability | 5 | 5 | 4 | **100** | S | Reliability | all-14+ | n/a | **high** | core.cts | `src/core.cts:545-552` vs `src/config.cts:639`(get)/`:429`(set); repro C-01 |
+| **QW-REL-05** | Resolve Node-version contradiction (docs say 18+, package needs ≥22) + add `process.version` guard | Reliability + **UX** | 5 | 5 | 4 | **100** | S | Reliability | all-14+ | n/a | **high** | core.cts / bin | `package.json engines '>=22'` vs docs `Node 18+` (install-on-your-runtime.md:5, your-first-project.md:15, +translations, 18 doc files); no install guard |
+| **QW-REL-02** | Never emit an empty slug — fall back / warn on `''` sanitization | Reliability | 4 | 5 | 4 | **80** | S | Reliability | all-14+ | n/a | **med** | core.cts | `src/core.cts:1919-1921`; `src/commands.cts:1166,1171`; repro C-02 |
+| **QW-UX-01** | Add interactive profile prompt to the installer (core/standard/full) | UX + **Token** | 5 | 5 | 3 | **75** | M | UX | all-14+ | n/a | n/a | bin-subsystem | `src/install-profiles.cts:499-506`; `bin/install.js:371-376` (flags), no interactive prompt |
+| **QW-UX-04** | Reconcile tutorial's claimed install output with real installer output | UX | 3 | 5 | 5 | **75** | S | UX | none | n/a | n/a | UX/Onboarding | `docs/tutorials/your-first-project.md:36-40` vs `bin/install.js:10111,11874` |
 | **QW-TOK-01** | Strip dead commented-out PostToolUse hooks stub from 24 agent frontmatters | Token | 3 | 5 | 5 | **75** | S | Token | all-14+ | **mechanical** | n/a | Token | `agents/gsd-planner.md:6-11` (+24 via `grep '^# hooks:'`) |
-| **QW-UX-05** | Add orientation + surface-slimming signpost to the post-install 'Done!' message | UX | 4 | 4 | 4 | **64** | S | UX | all-14+ | n/a | n/a | bin-subsystem | `bin/install.js:10262-10274` (both 'Done!' branches) |
-| **QW-UX-03** | Fix all 3 stale counts in installer `--help` (`66`→67, core `7`→8, standard `~13`→14) | UX | 2 | 5 | 5 | **50** | S | UX | none | n/a | n/a | bin-subsystem | `bin/install.js:686`; live 67; `src/install-profiles.cts:28-37` core=8, `:38-56` standard=14 |
+| **QW-UX-05** | Add orientation + surface-slimming signpost to the post-install 'Done!' message | UX | 4 | 4 | 4 | **64** | S | UX | all-14+ | n/a | n/a | bin-subsystem | `bin/install.js:11864-11877` (both 'Done!' branches) |
+| **QW-UX-03** | Fix stale counts in installer `--help` — **LARGELY RESOLVED ON next** (counts now derived) | UX | 2 | 5 | 5 | **50** | S | UX | none | n/a | n/a | bin-subsystem | `bin/install.js:583` (now derives `PROFILES.{core,standard}.length`, 'full — all skills'); live 67; `src/install-profiles.cts:28-37` core=8, `:38-56` standard=14 |
 | **QW-UX-08** | Clarify ns-\* namespace facades vs underlying commands for newcomers | UX + **Token** | 3 | 4 | 4 | **48** | S | UX | claude-only | **instructional** | n/a | UX/Onboarding | `src/clusters.cts:97-104`; `commands/gsd/ns-*.md` (6) |
 | **QW-REL-04** | Populate human message on drift-detector exception branch (no blank echo) | Reliability | 2 | 4 | 5 | **40** | S | Reliability | claude-only | n/a | **low** | drift.cts | `src/drift.cts:252-255 → 259-270` (message:''); C-04 |
-| **QW-TOK-03** | Normalize 724 legacy colon-form `/gsd:<cmd>` refs to canonical `/gsd-<cmd>` | Token | 2 | 5 | 4 | **40** | S | Token | all-14+ | **mechanical** | n/a | Token | `grep -rho '/gsd:[a-z-]*' …` → 724; CLAUDE.md anti-pattern |
-| **QW-UX-06** | Make `standard` (not `full`) the recommended/highlighted newcomer choice | UX | 4 | 3 | 3 | **36** | M | UX | all-14+ | n/a | n/a | bin-subsystem | `src/install-profiles.cts:38-56` + `:443-451` (default=full) |
-| **QW-TOK-02** | Factor `<documentation_lookup>` into one include (8 agents) — **preserve the `command -v` security guard** | Token | 3 | 4 | 3 | **36** | M | Token | all-14+ | **instructional** | n/a | Token | 8 agents, **4 variants** (md5); 3 carry `command -v ctx7` guard + "Do NOT use `npx --yes`" warning |
+| **QW-TOK-03** | Normalize legacy colon-form `/gsd:<cmd>` refs to canonical `/gsd-<cmd>` | Token | 2 | 5 | 4 | **40** | S | Token | all-14+ | **mechanical** | n/a | Token | `grep -rho '/gsd:[a-z-]*' agents commands gsd-core` → **1073** (corrected); CLAUDE.md anti-pattern |
+| **QW-UX-06** | Make `standard` (not `full`) the recommended/highlighted newcomer choice | UX | 4 | 3 | 3 | **36** | M | UX | all-14+ | n/a | n/a | bin-subsystem | `src/install-profiles.cts:38-56` + `:499-506` (default=full) |
+| **QW-TOK-02** | Factor `<documentation_lookup>` into one include (8 agents) — **preserve the `command -v` security guard** | Token | 3 | 4 | 3 | **36** | M | Token | all-14+ | **instructional** | n/a | Token | 8 agents, **3 variants** on next (md5); **2** carry `command -v ctx7` guard + "Do NOT use `npx --yes`" warning (was 4 variants / 3 guarded on feat — re-pin) |
 | **QW-TOK-04** | Audit/tighten the 100 agent/command `description` strings (the eager bytes) | Token | 4 | 3 | 3 | **36** | M | Token | all-14+ | **instructional** | n/a | Token | 100 files (tokenize.mjs); agent desc uncapped (`gsd-planner.md:3`) |
 | **QW-TOK-07** | Lock the `mandatory-initial-read.md` include against drift across 5 includers | Token | 2 | 4 | 4 | **32** | S | Token | all-14+ | **mechanical** | n/a | Token | `gsd-core/references/mandatory-initial-read.md`; 5 includers |
 | **QW-REL-03** | Document (or align) the exit-code contract for no-`.planning/` data reads | Reliability | 2 | 4 | 4 | **32** | S | Reliability | none | n/a | **low** | docs | `state/progress/find-phase`→0 vs `roadmap`→1; repro C-03 |
@@ -114,7 +114,7 @@ worst-timed failure mode.
 | **QW-TOK-02** | NOT verbatim — 3 of the 8 `<documentation_lookup>` blocks carry a `command -v ctx7` supply-chain security guard + "Do NOT use `npx --yes`" warning the others lack | factor-out preserving the guarded variant, never collapse to `npx --yes` | **ctx7-guard parity harness** — md5/diff all 8 blocks before & after; executor/planner/phase-researcher MUST retain the `command -v ctx7` guard + warning; collapsing to the `npx --yes` form is a supply-chain regression and a blocker |
 | **QW-TOK-04** | The `description` IS the routing signal a model reads to pick an agent | tighten, not cut | **agent-routing recall harness** — A/B an ambiguous task → agent selection (prohibition-elicitation style); each trimmed description must still route to the correct agent before the cut lands |
 | **QW-TOK-05** | The inlined Step 0/1/config-gate text is load-bearing graphify orchestration | relocate verbatim, never delete | **graphify behavior-equivalence harness** — run `/gsd-graphify build\|query\|status\|diff` before & after; config-gate STOP branches must fire identically |
-| **QW-TOK-06** | Every branch is load-bearing plan/execute orchestration | restructure, never delete | **plan/execute edge-probe + verifier-reach harness** — edge-probe taxonomy (`gsd-core/references/edge-probe.md`) + plan-checker/verifier suite must pass identically on a fixture phase, mode-split vs monolithic; any drop in caught edges is a blocker |
+| **QW-TOK-06** | Every branch is load-bearing plan/execute orchestration | restructure, never delete | **plan/execute edge-probe + verifier-reach harness** — edge-probe taxonomy + plan-checker/verifier suite must pass identically on a fixture phase, mode-split vs monolithic; any drop in caught edges is a blocker. ⚠️ **edge-probe-dependent:** `gsd-core/references/edge-probe.md` (and `src/edge-probe.cts`) are **NOT on `next`** (edge-probe PR #584/#550 unmerged). The recall-gate *methodology* is a valid gate name; the concrete edge-probe.md/edge-probe.cts harness assumes that PR merges. Until then, use the plan-checker/verifier suite alone as the parity oracle. |
 | **QW-UX-08** | Edits command-file frontmatter/body prose that ships to the runtime | clarify copy, never hide/delete | **`lint:descriptions` (≤100 char) + `lint:skill-deps` closure** — confirm no ns-\* `requires`/closure breaks before any copy change; ns-\* still dispatch identically |
 
 > **The remaining prompt-corpus items are `mechanical`** (QW-TOK-01, -03, -07): formatting,
@@ -137,10 +137,10 @@ worst-timed failure mode.
   runtime_blast_radius: all-14+
   mechanical_vs_instructional: n/a    # installer code, not prompt-corpus
   severity: n/a
-  citation: "src/install-profiles.cts:443-451 (default→full); bin/install.js:8311-8316 (no interactive profile prompt)"
+  citation: "src/install-profiles.cts:499-506 (default→full); bin/install.js:371-376 (--profile/--minimal flag parse), no interactive profile prompt at the call site"   # re-pinned to next 2026-06-08 (was install-profiles 443-451; bin 8311-8316)
   plan_only: true
   recall_gate: n/a
-  power_user_impact: "Skipped when --profile/--minimal passed or stdin non-TTY (installer gates runtime prompt on isTTY, bin/install.js:8599). Flag/CI installs unchanged; marker still persisted."
+  power_user_impact: "Skipped when --profile/--minimal passed or stdin non-TTY (installer gates runtime prompt on isTTY, bin/install.js:12127 — re-pinned; was :8599). Flag/CI installs unchanged; marker still persisted."
 
 - id: QW-UX-02
   title: "Document the profile choice in the README Quickstart and install-on-your-runtime guide"
@@ -151,7 +151,7 @@ worst-timed failure mode.
   runtime_blast_radius: none
   mechanical_vs_instructional: n/a
   severity: n/a
-  citation: "README.md Quickstart (grep -niE 'profile|surface' → 0 hits); bin/install.js:686 (--profile help text exists)"
+  citation: "README.md Quickstart (grep -niE 'profile|surface' → 0 hits); bin/install.js:583 (--profile help text exists)"   # re-pinned to next 2026-06-08 (was :686)
   plan_only: true
   recall_gate: n/a
 
@@ -164,10 +164,11 @@ worst-timed failure mode.
   runtime_blast_radius: none
   mechanical_vs_instructional: n/a
   severity: n/a
-  citation: "bin/install.js:686 — 'full — all 66 skills' (live commands/gsd/*.md = 67); 'core — 7 main-loop skills' (src/install-profiles.cts:28-37 core = 8); 'standard — ~13 skills' (src/install-profiles.cts:38-56 standard = 14)"
+  status_on_next: "LARGELY RESOLVED / RE-SCOPE — re-pin 2026-06-08. The three hard-coded stale counts existed on feat but are GONE on next: bin/install.js:583 now derives 'core — ${PROFILES.core.length} main-loop skills' and 'standard — ${PROFILES.standard.length} skills', and 'full — all skills (default)' carries NO number. The executor's own 'derive programmatically' recommendation was already implemented upstream. The remaining defect (if any) is only that the tutorial/README still say '86' (that is QW-UX-04). Close QW-UX-03 or re-scope to a drift-lock TEST that asserts the help counts equal PROFILES.*.length."
+  citation: "RE-PIN 2026-06-08 (next): bin/install.js:583 derives PROFILES.core.length / PROFILES.standard.length, 'full — all skills (default)' has no number (was :686 hard-coded '66'/'7'/'~13' on feat). Live facts still hold: commands/gsd/*.md = 67; src/install-profiles.cts:28-37 core = 8; :38-56 standard = 14"
   plan_only: true
   recall_gate: n/a
-  note: "Three stale counts in one --help string. Consider deriving all counts programmatically from install-profiles so they cannot drift again."
+  note: "On feat this was three stale counts in one --help string; on next they are already derived programmatically. Verify before scheduling — the work this item describes is mostly done."
 
 - id: QW-UX-04
   title: "Reconcile the tutorial's claimed install output with the real installer output"
@@ -178,7 +179,7 @@ worst-timed failure mode.
   runtime_blast_radius: none
   mechanical_vs_instructional: n/a
   severity: n/a
-  citation: "docs/tutorials/your-first-project.md:36-40 ('86 skills' + 'GSD Core ready') vs bin/install.js:8775,10271; live count 67"
+  citation: "docs/tutorials/your-first-project.md:36-40 ('86 skills' + 'GSD Core ready') vs bin/install.js:10111,11874; live count 67"   # re-pinned to next 2026-06-08 (was 8775,10271)
   plan_only: true
   recall_gate: n/a
 
@@ -191,7 +192,7 @@ worst-timed failure mode.
   runtime_blast_radius: all-14+
   mechanical_vs_instructional: n/a    # installer output, not a shipped prompt
   severity: n/a
-  citation: "bin/install.js:10262-10274 (both 'Done!' branches point only at /gsd-new-project + Discord)"
+  citation: "bin/install.js:11864-11877 (both 'Done!' branches point only at /gsd-new-project + Discord)"   # re-pinned to next 2026-06-08 (was 10262-10274)
   plan_only: true
   recall_gate: n/a
   power_user_impact: "Keep ≤2 lines so it does not bury the primary /gsd-new-project step."
@@ -205,7 +206,7 @@ worst-timed failure mode.
   runtime_blast_radius: all-14+
   mechanical_vs_instructional: n/a
   severity: n/a
-  citation: "src/install-profiles.cts:38-56 (standard set) + :443-451 (current default = full)"
+  citation: "src/install-profiles.cts:38-56 (standard set) + :499-506 (current default = full)"   # re-pinned to next 2026-06-08 (default was :443-451)
   plan_only: true
   recall_gate: n/a
   power_user_impact: "MUST preserve full via flag/marker. Ship ONLY behind the interactive prompt (QW-UX-01) so non-interactive/CI installs keep 'full' back-compat. Do NOT silently flip the bare default."
@@ -259,14 +260,14 @@ worst-timed failure mode.
   product: Token
   owner: token-stream
   runtime_blast_radius: all-14+
-  mechanical_vs_instructional: instructional    # EXECUTION-RISK — NOT verbatim: 4 variants across 8 agents; 3 carry a command -v ctx7 supply-chain security guard
+  mechanical_vs_instructional: instructional    # EXECUTION-RISK — NOT verbatim: 3 variants across 8 agents on next; 2 carry a command -v ctx7 supply-chain security guard
   severity: n/a
-  citation: "8 agents carry <documentation_lookup> (grep -l → 8) but md5 = 4 DISTINCT variants: 5 researchers use `npx --yes ctx7@latest`; gsd-executor/gsd-planner/gsd-phase-researcher use a `command -v ctx7` guard + explicit 'Do NOT use npx --yes — silently executes unverified packages' warning"
+  citation: "RE-PIN 2026-06-08 (next): 8 agents carry <documentation_lookup> (grep -l → 8: executor, planner, phase-researcher, advisor/ai/domain/project/ui-researcher) but md5 = 3 DISTINCT variants: 6 researchers share one (no guard); gsd-executor and gsd-planner use a `command -v ctx7` guard + explicit 'Do NOT use npx --yes — silently executes unverified packages' warning. Drift from feat: feat said 4 variants / 3 guarded (incl. gsd-phase-researcher); on next phase-researcher no longer carries the ctx7 guard → 2 guarded agents"
   plan_only: true
-  recall_gate: "ctx7-guard parity harness — md5/diff all 8 documentation_lookup blocks before & after; the 3 shell-executing agents (executor/planner/phase-researcher) MUST retain the `command -v ctx7` guard + 'Do NOT use npx --yes' warning. Collapsing the guarded variant into the `npx --yes` form is a supply-chain regression and a blocker."
+  recall_gate: "ctx7-guard parity harness — md5/diff all 8 documentation_lookup blocks before & after; the shell-executing guarded agents (on next: executor + planner) MUST retain the `command -v ctx7` guard + 'Do NOT use npx --yes' warning. Collapsing the guarded variant into the `npx --yes` form is a supply-chain regression and a blocker. (Re-confirm the guarded-agent set at execution time — it drifted between feat and next.)"
 
 - id: QW-TOK-03
-  title: "Normalize 724 legacy colon-form /gsd:<cmd> references to canonical /gsd-<cmd>"
+  title: "Normalize legacy colon-form /gsd:<cmd> references to canonical /gsd-<cmd>"
   streams: [Token]
   impact: 2; confidence: 5; ease: 4; ice: 40; tshirt: S
   product: Token
@@ -274,7 +275,7 @@ worst-timed failure mode.
   runtime_blast_radius: all-14+    # Codex uses $gsd-<cmd>; runtime-slash.cjs converts — verify no regression
   mechanical_vs_instructional: mechanical    # textual reference normalization
   severity: n/a
-  citation: "grep -rho '/gsd:[a-z-]*' agents/*.md commands/gsd/*.md gsd-core/workflows/*.md → 724; CLAUDE.md anti-pattern"
+  citation: "RE-PIN 2026-06-08 — COLON COUNT CORRECTED: grep -rho '/gsd:[a-z-]*' agents commands gsd-core | wc -l → 1073 on next (the backlog's verify command). The earlier '724' was the token stream's NARROWER grep (`agents/*.md commands/gsd/*.md gsd-core/workflows/*.md`), which is 719 on next — not contamination, just a smaller file set. Canonical scope is the broad 1073. CLAUDE.md anti-pattern 'Hardcoding colon-form slash-command references'"
   plan_only: true
   recall_gate: n/a
 
@@ -315,7 +316,7 @@ worst-timed failure mode.
   severity: n/a
   citation: "gsd-core/workflows/execute-phase.md (21,527 tok), plan-phase.md (20,693 tok) vs discuss-phase/modes/*.md lazy-load split"
   plan_only: true
-  recall_gate: "plan/execute edge-probe + verifier-reach harness — edge-probe taxonomy + plan-checker/verifier suite must pass identically (mode-split vs monolithic) on a fixture phase; any drop in caught edges is a blocker"
+  recall_gate: "plan/execute edge-probe + verifier-reach harness — edge-probe taxonomy + plan-checker/verifier suite must pass identically (mode-split vs monolithic) on a fixture phase; any drop in caught edges is a blocker. ⚠️ RE-PIN 2026-06-08 — edge-probe-dependent: `gsd-core/references/edge-probe.md` and `src/edge-probe.cts` are NOT on next (edge-probe PR #584/#550 unmerged). The recall-gate METHODOLOGY (edge-case taxonomy) is a valid gate name; the concrete edge-probe.md harness assumes that PR merges. Until then, use the plan-checker/verifier suite alone as the parity oracle."
 
 - id: QW-TOK-07
   title: "Lock the mandatory-initial-read.md include against drift across the 5 files that @-include it"
@@ -344,7 +345,7 @@ worst-timed failure mode.
   runtime_blast_radius: all-14+    # loadConfig is on every runtime's hot path
   mechanical_vs_instructional: n/a    # engine code, not prompt corpus
   severity: high
-  citation: "src/core.cts:544-551 (silent fallback) vs src/config.cts:417 (errors); repro C-01"
+  citation: "src/core.cts:545-552 (silent fallback) vs src/config.cts:639 config-get / :429 config-set (errors); repro C-01"   # re-pinned to next 2026-06-08 (was core 544-551, config 417)
   plan_only: true
   recall_gate: n/a
   handoff_note: "Converging loadConfig to ERROR (like config-get) is a behavior change → Phase 13 (H-01)."
@@ -358,7 +359,7 @@ worst-timed failure mode.
   runtime_blast_radius: all-14+
   mechanical_vs_instructional: n/a
   severity: med
-  citation: "src/core.cts:1863-1865; consumed at src/commands.cts:1164,1169; repro C-02"
+  citation: "src/core.cts:1919-1921; consumed at src/commands.cts:1166,1171; repro C-02"   # re-pinned to next 2026-06-08 (was core 1863-1865, commands 1164,1169)
   plan_only: true
   recall_gate: n/a
 
@@ -398,11 +399,106 @@ worst-timed failure mode.
   runtime_blast_radius: all-14+    # install-path; every runtime install touches it
   mechanical_vs_instructional: n/a    # docs + installer code, not prompt corpus
   severity: high
-  citation: "package.json engines.node = '>=22.0.0' vs docs blessing 'Node.js 18+' at docs/how-to/install-on-your-runtime.md:5 and docs/tutorials/your-first-project.md:15 (+ the 4 translations ja-JP/ko-KR/pt-BR/zh-CN — ~15 doc files via `grep -rliE 'node.?js 18' docs/`); no process.version guard in bin/install.js (grep → none); no .npmrc engine-strict (npm only WARNs EBADENGINE)"
+  citation: "package.json engines.node = '>=22.0.0' (package.json:47) vs docs blessing 'Node.js 18+' at docs/how-to/install-on-your-runtime.md:5 and docs/tutorials/your-first-project.md:15 (+ translations ja-JP/ko-KR/pt-BR/zh-CN — 18 doc files on next via `grep -rliE 'node.?js 18' docs/ | grep -v review`, re-pinned 2026-06-08; was ~15); no process.version guard in bin/install.js (grep → none, still 0); no .npmrc engine-strict (npm only WARNs EBADENGINE)"
   plan_only: true
   recall_gate: n/a
   handoff_note: "Doc half (18+ → 22+) is blast:none and trivial; the installer process.version guard is the all-14+ half. A newcomer on Node 18–21 (which the docs actively endorse: 'node --version should print v18.x.x or higher') installs successfully then hits a confusing/late Node-22 runtime failure — the exact spotlight-eve first-touch landmine the fast-track exists to prevent."
 ```
+
+---
+
+## Re-pin pass (verified against `next`, 2026-06-08)
+
+M1 (these 20 quick-wins) was originally analyzed against `feat/non-inferable-pipeline` (= `next`
++ ~97 commits of unmerged edge-probe / experiment work). That branch was later **rebased onto
+clean `origin/next`**, so the deliverables' `file:line` citations had been measured against a
+different tree. This pass re-verified **every** citation against the current `next` working tree
+(this branch's tracked source == `origin/next`, tip `29c0a2f5`), fixed drift, and flagged
+anything that only exists on the edge-probe branch. **Source of truth: `src/*.cts`** (never the
+gitignored compiled `.cjs`). **Plan-only:** only the 4 M1 deliverable markdown files were edited;
+no `src/`, `bin/`, `gsd-core/` source was touched.
+
+### (a) Coverage — citations verified
+
+All cited surfaces were opened on `next` and checked against the described code/behavior:
+`src/core.cts` (loadConfig silent-default, generateSlugInternal), `src/config.cts` (parse-fail
+errors), `src/commands.cts` (slug consumer), `src/install-profiles.cts` (resolveEffectiveProfile
+default, PROFILES core/standard arrays), `src/drift.cts` (exception branch), `src/clusters.cts`
+(core_loop / ns_meta), `bin/install.js` (help text, profile flags, isTTY gate, install-output
+strings, both 'Done!' branches), the onboarding docs (README, your-first-project,
+install-on-your-runtime + translations), `package.json` engines, the agent corpus
+(`# hooks:` stub ×24, `<documentation_lookup>` ×8, descriptions), `commands/gsd/graphify.md` /
+`plan-phase.md`, and `gsd-core/references/mandatory-initial-read.md`. **~30 distinct
+file:line / count citations verified across the 20 items + 5 stream findings (C-01…C-05).**
+
+### (b) Drifted-and-fixed (old → new line numbers)
+
+The big driver was **`bin/install.js`, which grew from ~11k lines (feat) to 12,727 (next)** —
+every bin citation moved.
+
+| Item | Citation | Old (feat) | New (`next`) |
+|------|----------|-----------|--------------|
+| QW-REL-01 | `core.cts` silent-default catch block | `544-551` | **`545-552`** |
+| QW-REL-01 | `config.cts` parse-fail error (config-get / config-set) | `417` | **`639` (get) / `429` (set)** |
+| QW-REL-01 | `core.cts` unknown-key warning (mirror target) | `455` | **`456`** |
+| QW-REL-02 | `core.cts` `generateSlugInternal` | `1863-1865` | **`1919-1921`** |
+| QW-REL-02 | `commands.cts` slug consumer (scaffold phase-dir) | `1164,1169` | **`1166,1171`** |
+| QW-UX-01 / -06 | `install-profiles.cts` `resolveEffectiveProfile` default→full | `443-451` | **`499-506`** (marker honoring `447-448` → **`503-504`**) |
+| QW-UX-01 | `bin/install.js` `--profile`/`--minimal` flag parse | `264-281` | **`371-376`** |
+| QW-UX-01 | `bin/install.js` isTTY gate | `8599` | **`12127`** |
+| QW-UX-02 / -03 | `bin/install.js` `--help` profile block | `686` | **`583`** |
+| QW-UX-04 | `bin/install.js` `Installed <count> commands to commands/gsd/` | `8775` | **`10111`** |
+| QW-UX-04 / -05 | `bin/install.js` `Done!` run-/gsd-new-project line | `10271` | **`11874`** |
+| QW-UX-05 | `bin/install.js` both `Done!` branches | `10262-10274` | **`11864-11877`** |
+| QW-TOK-02 | `<documentation_lookup>` variant structure | 4 variants / 3 guarded (incl. phase-researcher) | **3 variants / 2 guarded (executor + planner)** — see (c) |
+
+**Exact-and-unchanged on `next` (verified, no edit needed):** `clusters.cts:33-40` (core_loop=6)
+and `:97-104` (ns_meta=6); `install-profiles.cts:28-37` (core=8) and `:38-56` (standard=14);
+`drift.cts:252-255 → 259-270` (`message:''`); `agents/gsd-planner.md:6-11` (`# hooks:` stub, ×24
+agents); `gsd-planner.md:3` (uncapped description); `graphify.md:11` (STOP banner);
+`plan-phase.md:32-35` (@-includes); `mandatory-initial-read.md` (×5 includers);
+`your-first-project.md:36-40` ('86 skills'/'GSD Core ready'); `your-first-project.md:15` &
+`install-on-your-runtime.md:5` ('Node.js 18'); `package.json:47` (engines `>=22.0.0`); README
+0 profile hits. **Live counts:** commands/gsd = **67**, agents = **33** (both match).
+
+### (c) Edge-probe-dependent items flagged (not on `next`)
+
+- **QW-TOK-06 recall_gate** cited `gsd-core/references/edge-probe.md`. That file — and
+  `src/edge-probe.cts` — are **NOT on `next`** (edge-probe PR #584/#550 unmerged). Flagged in
+  both the EXECUTION-RISK table and the YAML: the recall-gate *methodology* (edge-case taxonomy)
+  remains a valid gate NAME, but the concrete edge-probe.md/edge-probe.cts harness assumes that PR
+  merges. Until then, the plan-checker/verifier suite alone is the parity oracle. (References to
+  "edge-probe" as the NAME of the gate methodology elsewhere are intentionally left intact.)
+- **QW-TOK-02** drifted (not absent): the `<documentation_lookup>` corpus on `next` is 8 agents
+  with **3** md5 variants and **2** carrying the `command -v ctx7` supply-chain guard
+  (gsd-executor, gsd-planner). On feat it was 4 variants / 3 guarded — **`gsd-phase-researcher` no
+  longer carries the ctx7 guard on `next`**, and the researcher set now includes
+  `gsd-ai-researcher`. The load-bearing thesis (NOT verbatim; a real guard exists in a subset;
+  never collapse to `npx --yes`) still holds; only the agent list moved. Re-confirm the guarded
+  set at execution time.
+
+### (d) Colon-form count correction
+
+The backlog's QW-TOK-03 said **724**. The true count on `next` via the backlog's own verify
+command `grep -rho '/gsd:[a-z-]*' agents commands gsd-core | wc -l` is **1073** — corrected in the
+ICE table and the YAML. The `724` was **not contamination**: it was the token stream's *narrower*
+grep (`agents/*.md commands/gsd/*.md gsd-core/workflows/*.md`), which on `next` is **719** (a
+slightly different, smaller file set). Both figures are now recorded with their exact greps; the
+canonical scope is the broad **1073**.
+
+### (e) Item that no longer reproduces on `next`
+
+- **QW-UX-03 (stale `--help` counts) is LARGELY RESOLVED on `next`.** The three hard-coded stale
+  counts (`full — all 66 skills`, `core — 7 main-loop skills`, `standard — ~13 skills`) existed on
+  feat but are **gone** on `next`: `bin/install.js:583` now derives
+  `core — ${PROFILES.core.length}` and `standard — ${PROFILES.standard.length}`, and
+  `full — all skills (default)` carries no number. The executor's own "derive programmatically"
+  recommendation was already implemented upstream. **QW-UX-03 should be closed or re-scoped to a
+  drift-lock test.** (The tutorial/README "86 skills" mismatch is a *separate* defect — that is
+  QW-UX-04, which still reproduces.) Every other finding (C-01…C-05, the slug bug, the silent
+  config default, the drift blank message, the Node-version contradiction, the colon-form sprawl,
+  the inlined graphify workflow, the `# hooks:` stub) **still reproduces on `next`** — edge-probe
+  was additive, so the core-engine behaviors are intact.
 
 ---
 

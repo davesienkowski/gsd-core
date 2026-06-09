@@ -102,11 +102,22 @@ and name a **recall_gate** — never "delete this."
 
 > **Correction (adversarial review, 2026-06-07):** QW-TOK-02 was originally tagged
 > `mechanical` on a "verbatim-identical in 8 agents" premise. Re-verification (md5/diff of each
-> `<documentation_lookup>` block) **refutes** that: the 8 blocks are **4 distinct variants**, and
-> 3 of them (gsd-executor, gsd-planner, gsd-phase-researcher) carry a deliberate **supply-chain
-> security guard** (`command -v ctx7` + "Do NOT use `npx --yes`" warning) the 5 researcher agents
-> lack. Factoring them is therefore **load-bearing / EXECUTION-RISK**, not mechanical. Re-tagged
-> below with a named parity gate. The mechanical set is now 4 (QW-TOK-01, -03, -07, -08).
+> `<documentation_lookup>` block) **refutes** that: the blocks are **not all identical**, and a
+> subset carry a deliberate **supply-chain security guard** (`command -v ctx7` + "Do NOT use
+> `npx --yes`" warning) the others lack. Factoring them is therefore **load-bearing /
+> EXECUTION-RISK**, not mechanical. Re-tagged below with a named parity gate. The mechanical set
+> is now 4 (QW-TOK-01, -03, -07, -08).
+>
+> **RE-PIN 2026-06-08 (verified against `next`):** the variant *structure* drifted from the feat
+> measurement. On clean `next` the 8 `<documentation_lookup>` agents are
+> **executor, planner, phase-researcher, advisor/ai/domain/project/ui-researcher** (note: feat
+> said "5 researchers"; on next there are 6 researcher-type agents incl. `gsd-ai-researcher`).
+> md5 yields **3 distinct variants** (not 4): `gsd-executor` (carries `command -v ctx7` guard +
+> "Do NOT use `npx --yes`" warning), `gsd-planner` (carries the `command -v ctx7` guard), and one
+> shared variant across the 6 researchers (no guard). **`gsd-phase-researcher` no longer carries
+> the `command -v ctx7` guard on `next`** — so the load-bearing guard now lives in **2** agents
+> (executor + planner), not 3. The thesis (NOT verbatim; a real supply-chain guard exists in a
+> subset; never collapse to `npx --yes`) **still holds** — only the agent list/variant count moved.
 
 ```yaml
 - id: QW-TOK-01
@@ -135,16 +146,16 @@ and name a **recall_gate** — never "delete this."
   product: Token
   owner: token-stream
   runtime_blast_radius: all-14+
-  mechanical_vs_instructional: instructional   # EXECUTION-RISK — NOT verbatim; 4 variants, 3 carry a supply-chain security guard (command -v ctx7 + "Do NOT use npx --yes" warning)
+  mechanical_vs_instructional: instructional   # EXECUTION-RISK — NOT verbatim; 3 variants on next, 2 carry a supply-chain security guard (command -v ctx7 + "Do NOT use npx --yes" warning)
   severity: n/a
-  citation: "8 agents carry <documentation_lookup> (grep -l → 8) but md5 yields 4 DISTINCT variants: 5 researchers use `npx --yes ctx7@latest`; gsd-executor / gsd-planner / gsd-phase-researcher instead use a `command -v ctx7` guard with an explicit 'Do NOT use npx --yes — silently executes unverified packages' supply-chain warning (agents/gsd-executor.md, gsd-planner.md, gsd-phase-researcher.md)"
+  citation: "RE-PIN 2026-06-08 (next): 8 agents carry <documentation_lookup> (grep -l → 8: executor, planner, phase-researcher, advisor/ai/domain/project/ui-researcher) but md5 yields 3 DISTINCT variants: 6 researchers share one (no guard); gsd-executor and gsd-planner instead use a `command -v ctx7` guard with an explicit 'Do NOT use npx --yes — silently executes unverified packages' supply-chain warning (agents/gsd-executor.md, gsd-planner.md). NB drift from feat: feat cited 4 variants and 3 guarded agents incl. gsd-phase-researcher; on next phase-researcher no longer carries the ctx7 guard, leaving 2 guarded agents."
   plan_only: true
-  recall_gate: "ctx7-guard parity harness — md5/diff the documentation_lookup block of all 8 agents before & after; the 3 shell-executing agents (executor/planner/phase-researcher) MUST still carry the `command -v ctx7` guard + 'Do NOT use npx --yes' warning. Any factor-out that collapses the guarded variant into the `npx --yes` form is a supply-chain regression and a blocker."
+  recall_gate: "ctx7-guard parity harness — md5/diff the documentation_lookup block of all 8 agents before & after; the shell-executing guarded agents (on next: executor + planner) MUST still carry the `command -v ctx7` guard + 'Do NOT use npx --yes' warning. Any factor-out that collapses the guarded variant into the `npx --yes` form is a supply-chain regression and a blocker. (Re-confirm the guarded-agent set at execution time — it drifted between feat and next.)"
 
 - id: QW-TOK-03
-  title: "Normalize 724 legacy colon-form /gsd:<cmd> references to canonical /gsd-<cmd> in the prompt corpus"
+  title: "Normalize legacy colon-form /gsd:<cmd> references to canonical /gsd-<cmd> in the prompt corpus"
   impact: 2          # mostly correctness/consistency; token delta small, but anti-pattern per CLAUDE.md
-  confidence: 5      # measured: 724 occurrences across agents+commands+workflows; canonical form is hyphen
+  confidence: 5      # RE-PIN 2026-06-08 (next): stream-method grep (agents/*.md commands/gsd/*.md gsd-core/workflows/*.md) = 719 (was 724 on feat). Broader grep (agents commands gsd-core, recursive — the backlog's verify command) = 1073. Canonical form is hyphen.
   ease: 4            # mechanical sed-style rewrite, but multi-runtime so verify slash emission
   ice: 40            # 2 × 5 × 4
   tshirt: S
@@ -153,7 +164,7 @@ and name a **recall_gate** — never "delete this."
   runtime_blast_radius: all-14+    # Codex uses $gsd-<cmd>; runtime-slash.cjs converts — verify no regression
   mechanical_vs_instructional: mechanical   # textual reference normalization, no behavior change
   severity: n/a
-  citation: "grep -rho '/gsd:[a-z-]*' agents/*.md commands/gsd/*.md gsd-core/workflows/*.md → 724; CLAUDE.md anti-pattern 'Hardcoding colon-form slash-command references'"
+  citation: "grep -rho '/gsd:[a-z-]*' agents/*.md commands/gsd/*.md gsd-core/workflows/*.md → 719 on next (re-pinned 2026-06-08; was 724 on feat). The broader recursive grep over `agents commands gsd-core` (the backlog's verify command) = 1073. CLAUDE.md anti-pattern 'Hardcoding colon-form slash-command references'"
   plan_only: true
   recall_gate: n/a
 
@@ -203,7 +214,7 @@ and name a **recall_gate** — never "delete this."
   severity: n/a
   citation: "gsd-core/workflows/execute-phase.md (21,527 tok), plan-phase.md (20,693 tok) vs the proven gsd-core/workflows/discuss-phase/modes/*.md lazy-load split"
   plan_only: true
-  recall_gate: "plan/execute edge-probe + verifier-reach harness — the edge-probe taxonomy (gsd-core/references/edge-probe.md) and the plan-checker/verifier suite must pass identically on a fixture phase with mode-split vs monolithic workflows before adoption. Treat any drop in caught edges as a blocker."
+  recall_gate: "plan/execute edge-probe + verifier-reach harness — the edge-probe taxonomy and the plan-checker/verifier suite must pass identically on a fixture phase with mode-split vs monolithic workflows before adoption. Treat any drop in caught edges as a blocker. ⚠️ RE-PIN 2026-06-08: `gsd-core/references/edge-probe.md` is NOT on `next` (edge-probe PR #584/#550 unmerged) — the literal file citation is edge-probe-dependent. The recall-gate methodology (edge-case taxonomy) remains valid as a GATE NAME; the concrete edge-probe.md harness assumes that PR merges. Until then, use the plan-checker/verifier suite alone as the parity oracle."
 
 - id: QW-TOK-07
   title: "De-duplicate the @~/.claude/gsd-core/references/mandatory-initial-read.md preamble handling across the 5 files that @-include it"
