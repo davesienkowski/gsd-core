@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Scripts & ESLint rules — `scripts/`, `eslint-rules/`
 
 > **Non-engine subsystem** (58 + 4 files) · reviewer doc (DOC-01) · derived 2026-06-08 from live code.
@@ -52,4 +54,4 @@ out of sync.
 - **`package-identity.cjs` is generated** — coordinate literals (package name, repo) must flow
   through the seam, not be hardcoded (the identity-drift lint catches stray literals).
 - The custom ESLint rules encode this repo's test discipline — they're `warn` today, some
-  ratcheting to `error` (e.g. `no-source-grep` after issue #453).
+  ratcheting to `error` (e.g. `no-source-grep` is slated to become an error).

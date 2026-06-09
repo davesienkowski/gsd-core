@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # FINDINGS.md — The Single Scored Register (Milestone 2)
 
 > **Status:** Assembled and scored (Phase 17, capstone). This is the **one source of truth**.
@@ -119,15 +121,15 @@ facet is cross-referenced from F-RECON-05.
 
 ## 2. Phase-16 residual re-verification (D-07) — re-checked against LIVE code 2026-06-08
 
-The priors behind F-RECON-03/04/05 are dated 2026-06-05 (pre-#604 rename). Per D-07 they were
+The priors behind F-RECON-03/04/05 are dated 2026-06-05 (pre-rename). Per D-07 they were
 re-verified against live `src/`/`bin/`/`gsd-core/`/`package.json` before sizing. **All three still
 reproduce; one material environment change was found that *strengthens* F-RECON-04's framing.**
 
 | Residual | Re-verify result (2026-06-08) | Verdict |
 |----------|-------------------------------|---------|
-| **F-RECON-03** (workflow-shim `$HOME`-hardcoded gsd-tools) | `grep -rln 'HOME/.claude' gsd-core/workflows/` -> still present in **10+ workflows** (ai-integration-phase, plan-review-convergence, health, stats, remove-phase, diagnose-issues, ...). `scripts/audit-workflow-script-paths.cjs` exists but does not yet assert version-skew or ban hardcoded `$HOME`. | **Reproduces.** Path prefix is now `gsd-core/workflows/` post-#604; the hazard class is unchanged. Size as carded. |
-| **F-RECON-04** (build/publish fragility; `{{GSD_VERSION}}` stamped at install) | `package.json` now has **`build:lib` = `tsc -p tsconfig.build.json`** (NEW — the ADR-457 transpile pipeline is now LIVE; 96 `src/*.cts` -> 92 `gsd-core/bin/lib/*.cjs`). `prepublishOnly = build:lib && build:hooks`. `hooks/dist/` is gitignored so it ships only via the build. **`{{GSD_VERSION}}` is still resolved in `bin/install.js` (8 hits), NOT in `scripts/build-hooks.js` (0 hits)** — the exact install-time-not-build-time stamp seam the prior flagged. **DUPLICATE-CONST FACET RESOLVED** (supplementary sweep, see `concerns/build-ci-hooks.md` §3): `scripts/build-hooks.js:122-134` now `vm.Script`-validates every `.js` hook before copy and `exit 1`s on SyntaxError — the #1107/1109/1125/1161 class is closed; all 13 live JS hooks pass. | **Partially reproduces.** The `{{GSD_VERSION}}` install-time stamp seam is confirmed live (carded facet stands). The historically-realized duplicate-const shipping defect is **RESOLVED**; the residual is narrower → **F-BUILD-01** (.sh hooks skip the validator) + **F-BUILD-03** (no byte-identical drift gate). The "largely hand-maintained `.cjs`" charter §0 note is partially stale (real `tsc` build now exists). |
-| **F-RECON-05** (security lens — prompt-injection / secret-log / advisory) | `src/security.cts`, `src/secrets.cts`, `scripts/prompt-injection-scan.sh` all present; `sanitizeForDisplay`/`maskIfSecret` live across `src/{init,audit,secrets,uat,security}.cts` + `observability/redaction.cts`. `package.json` still declares `@anthropic-ai/claude-agent-sdk ^0.2.84` and `ws 8.20.1`. | **Reproduces (injection/mask paths live), but the npm-advisory facet is RESOLVED.** `npm audit` re-run read-only 2026-06-08 (it does NOT mutate the lockfile — the prior deferral rationale was wrong; `git diff package-lock.json` confirmed empty after): **`found 0 vulnerabilities`** (info/low/moderate/high/critical all 0). The `^0.2.84` range resolved to the patched **`@anthropic-ai/claude-agent-sdk@0.2.141`**; `ws@8.20.1`. The prior's "1 high + 5 moderate via #3588" is **STALE/RESOLVED** — the recommended `package.json` overrides for that advisory are now a no-op. The security-LENS taxonomy point + the injection-consistency / `GSD_AUDIT_ARGS` mask facets **stand** (not run-verified). |
+| **F-RECON-03** (workflow-shim `$HOME`-hardcoded gsd-tools) | `grep -rln 'HOME/.claude' gsd-core/workflows/` -> still present in **10+ workflows** (ai-integration-phase, plan-review-convergence, health, stats, remove-phase, diagnose-issues, ...). `scripts/audit-workflow-script-paths.cjs` exists but does not yet assert version-skew or ban hardcoded `$HOME`. | **Reproduces.** Path prefix is now `gsd-core/workflows/` post-rename; the hazard class is unchanged. Size as carded. |
+| **F-RECON-04** (build/publish fragility; `{{GSD_VERSION}}` stamped at install) | `package.json` now has **`build:lib` = `tsc -p tsconfig.build.json`** (NEW — the ADR-457 transpile pipeline is now LIVE; 96 `src/*.cts` -> 92 `gsd-core/bin/lib/*.cjs`). `prepublishOnly = build:lib && build:hooks`. `hooks/dist/` is gitignored so it ships only via the build. **`{{GSD_VERSION}}` is still resolved in `bin/install.js` (8 hits), NOT in `scripts/build-hooks.js` (0 hits)** — the exact install-time-not-build-time stamp seam the prior flagged. **DUPLICATE-CONST FACET RESOLVED** (supplementary sweep, see `concerns/build-ci-hooks.md` §3): `scripts/build-hooks.js:122-134` now `vm.Script`-validates every `.js` hook before copy and `exit 1`s on SyntaxError — the prior duplicate-const hooks/dist class is closed; all 13 live JS hooks pass. | **Partially reproduces.** The `{{GSD_VERSION}}` install-time stamp seam is confirmed live (carded facet stands). The historically-realized duplicate-const shipping defect is **RESOLVED**; the residual is narrower → **F-BUILD-01** (.sh hooks skip the validator) + **F-BUILD-03** (no byte-identical drift gate). The "largely hand-maintained `.cjs`" charter §0 note is partially stale (real `tsc` build now exists). |
+| **F-RECON-05** (security lens — prompt-injection / secret-log / advisory) | `src/security.cts`, `src/secrets.cts`, `scripts/prompt-injection-scan.sh` all present; `sanitizeForDisplay`/`maskIfSecret` live across `src/{init,audit,secrets,uat,security}.cts` + `observability/redaction.cts`. `package.json` still declares `@anthropic-ai/claude-agent-sdk ^0.2.84` and `ws 8.20.1`. | **Reproduces (injection/mask paths live), but the npm-advisory facet is RESOLVED.** `npm audit` re-run read-only 2026-06-08 (it does NOT mutate the lockfile — the prior deferral rationale was wrong; `git diff package-lock.json` confirmed empty after): **`found 0 vulnerabilities`** (info/low/moderate/high/critical all 0). The `^0.2.84` range resolved to the patched **`@anthropic-ai/claude-agent-sdk@0.2.141`**; `ws@8.20.1`. The prior's "1 high + 5 moderate via the claude-agent-sdk advisory" is **STALE/RESOLVED** — the recommended `package.json` overrides for that advisory are now a no-op. The security-LENS taxonomy point + the injection-consistency / `GSD_AUDIT_ARGS` mask facets **stand** (not run-verified). |
 
 **One material environment delta to flag to the execution team:** the `build:lib` (`tsc`) step is
 now wired (it was not, at charter-writing time). This means the `.cts`->`.cjs` build-at-publish
@@ -175,7 +177,7 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
   mechanical_vs_instructional: n/a
   priority: 75
   recommendation: "Stop truncating to 2 — existence-check every file the summary marks Created/Modified (parse the explicit verbs to bound false positives), and drop the includes('/') filter so bare filenames are checked. A verifier-reach regression, not a perf knob."
-  recall_gate: "verifier-reach / self-grading harness (N17 exogenous-grading + #664 self-grade corpus) must show the widened check does not spike false BLOCKERs"
+  recall_gate: "verifier-reach / self-grading harness (N17 exogenous-grading + self-grade corpus) must show the widened check does not spike false BLOCKERs"
 
 - id: F-CORR-04
   problem_type: wrongness
@@ -237,7 +239,7 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
   mechanical_vs_instructional: n/a
   priority: 60
   recommendation: "Treat self_check as advisory only. Keep it OUT of the pass gate (verify.cts:148 already requires missing.length===0) or pair it with an EXOGENOUS grade (per N17). A self-asserted 'all pass' is not evidence."
-  recall_gate: "self-grading / exogenous-grading corpus (#664 + N17) before changing the pass formula"
+  recall_gate: "self-grading / exogenous-grading corpus (the self-grade corpus + N17) before changing the pass formula"
   debt_quadrant: prudent-inadvertent
 
 - id: F-CORR-09
@@ -331,7 +333,7 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
   runtime_blast_radius: all-16
   mechanical_vs_instructional: n/a
   priority: 36
-  recommendation: "(1) emit a gsd_run --version assertion after shim resolution and fail loudly on skew; (2) replace hardcoded node \"$HOME/.claude/...gsd-tools.cjs\" with the resolved gsd_run across the 10+ workflows; (3) extend audit-workflow-script-paths.cjs to catch hardcoded $HOME + validate gsd_run query <handler> tokens against the registered handler manifest. RE-VERIFIED live; path prefix is now gsd-core/workflows/ post-#604."
+  recommendation: "(1) emit a gsd_run --version assertion after shim resolution and fail loudly on skew; (2) replace hardcoded node \"$HOME/.claude/...gsd-tools.cjs\" with the resolved gsd_run across the 10+ workflows; (3) extend audit-workflow-script-paths.cjs to catch hardcoded $HOME + validate gsd_run query <handler> tokens against the registered handler manifest. RE-VERIFIED live; path prefix is now gsd-core/workflows/ post-rename."
   recall_gate: n/a
   provenance: "Prior CONCERNS 'Runtime Resolution Shim Hazards'; promoted (Phase 16), re-verified (Phase 17)."
 
@@ -339,7 +341,7 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
   problem_type: wrongness
   subsystem: installer
   tag: build-publish
-  file:line: "PRIOR CONCERNS.md:8-20 ({{GSD_VERSION}} replaced at install not build; duplicate-const PostToolUse hook shipped to all users, #1107/#1109/#1125/#1161). LIVE re-verify 2026-06-08: package.json now has build:lib (tsc) + prepublishOnly=build:lib&&build:hooks; hooks/dist gitignored (.gitignore:18); {{GSD_VERSION}} still resolved in bin/install.js (8 hits), 0 in scripts/build-hooks.js — install-time stamp seam CONFIRMED."
+  file:line: "PRIOR CONCERNS.md:8-20 ({{GSD_VERSION}} replaced at install not build; duplicate-const PostToolUse hook shipped to all users, since fixed). LIVE re-verify 2026-06-08: package.json now has build:lib (tsc) + prepublishOnly=build:lib&&build:hooks; hooks/dist gitignored (.gitignore:18); {{GSD_VERSION}} still resolved in bin/install.js (8 hits), 0 in scripts/build-hooks.js — install-time stamp seam CONFIRMED."
   severity: 4
   effort: M
   risk: med
@@ -347,7 +349,7 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
   runtime_blast_radius: all-16
   mechanical_vs_instructional: n/a
   priority: 36
-  recommendation: "(1) [LARGELY RESOLVED → see F-BUILD-01/03] the #1107-class duplicate-const ship is now prevented by build-hooks.js validateSyntax() (vm.Script per .js hook, exit 1 on SyntaxError); the RESIDUALS are F-BUILD-01 (.sh hooks skip the validator) + F-BUILD-03 (no byte-identical drift gate / commit hooks/dist). (2) [STANDS] stamp {{GSD_VERSION}} in build-hooks.js from package.json, not in install.js, so the tarball is self-consistent. MATERIAL DELTA: the build:lib tsc step is now LIVE — the publish path runs a real build, raising the importance of (2)."
+  recommendation: "(1) [LARGELY RESOLVED → see F-BUILD-01/03] the prior duplicate-const hook ship is now prevented by build-hooks.js validateSyntax() (vm.Script per .js hook, exit 1 on SyntaxError); the RESIDUALS are F-BUILD-01 (.sh hooks skip the validator) + F-BUILD-03 (no byte-identical drift gate / commit hooks/dist). (2) [STANDS] stamp {{GSD_VERSION}} in build-hooks.js from package.json, not in install.js, so the tarball is self-consistent. MATERIAL DELTA: the build:lib tsc step is now LIVE — the publish path runs a real build, raising the importance of (2)."
   recall_gate: n/a
   provenance: "Prior CONCERNS 'Build/Publish Fragility'; promoted (Phase 16), re-verified + build:lib delta noted (Phase 17)."
 
@@ -355,7 +357,7 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
   problem_type: wrongness
   subsystem: engine
   tag: security
-  file:line: "PRIOR CONCERNS.md:122-138 (prompt-injection sanitize consistency; GSD_AUDIT_ARGS=1 secret-leak; npm-audit 1 high+5 mod via claude-agent-sdk #3588 — STALE/RESOLVED, see below). LIVE re-verify 2026-06-08: src/security.cts + src/secrets.cts + scripts/prompt-injection-scan.sh present; sanitizeForDisplay/maskIfSecret live across src/{init,audit,secrets,uat,security}.cts + observability/redaction.cts; npm audit re-run read-only -> 0 vulnerabilities (claude-agent-sdk resolved to patched 0.2.141; ws 8.20.1)."
+  file:line: "PRIOR CONCERNS.md:122-138 (prompt-injection sanitize consistency; GSD_AUDIT_ARGS=1 secret-leak; npm-audit 1 high+5 mod via claude-agent-sdk advisory — STALE/RESOLVED, see below). LIVE re-verify 2026-06-08: src/security.cts + src/secrets.cts + scripts/prompt-injection-scan.sh present; sanitizeForDisplay/maskIfSecret live across src/{init,audit,secrets,uat,security}.cts + observability/redaction.cts; npm audit re-run read-only -> 0 vulnerabilities (claude-agent-sdk resolved to patched 0.2.141; ws 8.20.1)."
   severity: 3
   effort: M
   risk: low
@@ -363,7 +365,7 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
   runtime_blast_radius: all-16
   mechanical_vs_instructional: n/a
   priority: 27
-  recommendation: "TAXONOMY: typed wrongness + tag:security per the Phase-17 decision (§1). The security-LENS taxonomy point stands. Carry-forwards: (1) ensure every gsd_run handler that writes .planning/*.md routes through sanitizeForDisplay(); (2) apply maskIfSecret on the GSD_AUDIT_ARGS=1 audit-log path; (3) [DOWNGRADED — npm-advisory facet RESOLVED] npm audit re-run read-only 2026-06-08 = 0 vulnerabilities (the ^0.2.84 range resolved to the patched claude-agent-sdk@0.2.141); the prior's '1 high + 5 mod via #3588' is STALE and the recommended package.json overrides are now a no-op — close this facet. Do NOT drop facets (1)/(2). NB: the deferral rationale 'would mutate lockfile state' was wrong — `npm audit` (read) does not touch the lockfile (verified empty git diff). See also F-CI-01: there is no `npm audit` gate in CI to catch future drift."
+  recommendation: "TAXONOMY: typed wrongness + tag:security per the Phase-17 decision (§1). The security-LENS taxonomy point stands. Carry-forwards: (1) ensure every gsd_run handler that writes .planning/*.md routes through sanitizeForDisplay(); (2) apply maskIfSecret on the GSD_AUDIT_ARGS=1 audit-log path; (3) [DOWNGRADED — npm-advisory facet RESOLVED] npm audit re-run read-only 2026-06-08 = 0 vulnerabilities (the ^0.2.84 range resolved to the patched claude-agent-sdk@0.2.141); the prior's '1 high + 5 mod via the claude-agent-sdk advisory' is STALE and the recommended package.json overrides are now a no-op — close this facet. Do NOT drop facets (1)/(2). NB: the deferral rationale 'would mutate lockfile state' was wrong — `npm audit` (read) does not touch the lockfile (verified empty git diff). See also F-CI-01: there is no `npm audit` gate in CI to catch future drift."
   recall_gate: n/a
   provenance: "Prior CONCERNS 'Security Considerations' + 'Dependencies at Risk'; promoted as the highest-value prior-only contribution."
 ```
@@ -410,7 +412,7 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
   runtime_blast_radius: all-14+
   mechanical_vs_instructional: instructional
   priority: 36
-  recommendation: "Add an optional must_NOT_haves / prohibitions list to plan frontmatter the verifier checks as FAILED-on-presence. Closes the 'tests pass but behaviour is wrong' gap with explicit negative predicates. Keep it optional; surface where security/regression risk is high. [Aligns with prohibition-probe #644.]"
+  recommendation: "Add an optional must_NOT_haves / prohibitions list to plan frontmatter the verifier checks as FAILED-on-presence. Closes the 'tests pass but behaviour is wrong' gap with explicit negative predicates. Keep it optional; surface where security/regression risk is high. [Aligns with the upstream prohibition-probe work.]"
   recall_gate: "a fixture set of spec-gaming cases (work that satisfies all must_haves but violates an unstated prohibition) the extended verifier must catch"
 
 - id: F-AIGAP-04
@@ -1060,7 +1062,7 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
 - id: F-RECON-01
   problem_type: human-friction
   subsystem: skills
-  file:line: "PRIOR ARCHITECTURE.md:250 ('legacy /gsd: never emitted') vs :258 ('leaks into agent prose after install') vs CONCERNS.md:107-111 (#3584); FRESH F-UX-07/08 (18 source bodies emit /gsd:); LIVE bin/install.js:2176,:2288,:10299-10305 (transform allow-listed to {claude,qwen,hermes})"
+  file:line: "PRIOR ARCHITECTURE.md:250 ('legacy /gsd: never emitted') vs :258 ('leaks into agent prose after install') vs CONCERNS.md:107-111 (the confirmed-bug 'users see wrong slash-command syntax'); FRESH F-UX-07/08 (18 source bodies emit /gsd:); LIVE bin/install.js:2176,:2288,:10299-10305 (transform allow-listed to {claude,qwen,hermes})"
   severity: 3
   effort: M
   risk: low
@@ -1173,7 +1175,7 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
 > (F-CI-01, F-BUILD-01) + two `change-cost` (F-BUILD-02, F-BUILD-03). Narrative + the "what held
 > up" assessment (action pinning, token scope, publish gating all STRONG) are in
 > `concerns/build-ci-hooks.md`. **The F-RECON-04 hooks/dist duplicate-const defect class
-> (#1107/1109/1125/1161) is verified RESOLVED there** — `build-hooks.js` now syntax-validates every
+> (the broken hook shipped to users) is verified RESOLVED there** — `build-hooks.js` now syntax-validates every
 > `.js` hook before copy.
 
 ```yaml
@@ -1223,8 +1225,8 @@ changes type or severity from this delta; F-RECON-04's recommendation gains weig
   runtime_blast_radius: all-16
   mechanical_vs_instructional: n/a
   priority: 50                 # 2 × 5 × ease(S=5)
-  cross_check: "The same defect CLASS the .js validateSyntax() guards (#1107/1109/1125/1161 — a broken hook shipped to all users). The .js gate is the fix; the .sh hooks (community + graphify, opt-in) are the uncovered remainder. Opt-in lowers blast vs always-on .js hooks -> sev 2 not 4."
-  recommendation: "Extend build-hooks.js validation to .sh hooks (`bash -n`), degrading to a warning where a runner lacks bash. Closes the shell half of the #1107 defect class the .js validator already closes."
+  cross_check: "The same defect CLASS the .js validateSyntax() guards (the prior hooks/dist defect — a broken hook shipped to all users). The .js gate is the fix; the .sh hooks (community + graphify, opt-in) are the uncovered remainder. Opt-in lowers blast vs always-on .js hooks -> sev 2 not 4."
+  recommendation: "Extend build-hooks.js validation to .sh hooks (`bash -n`), degrading to a warning where a runner lacks bash. Closes the shell half of the prior hooks/dist defect class the .js validator already closes."
   recall_gate: n/a
   provenance: "Supplementary sweep build-ci-hooks.md (M2 review remediation); residual of the now-RESOLVED F-RECON-04 .js fix."
 

@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Pipeline Correctness — Deep Concern Sweep (Phase 13, CORR-01)
 
 > **Requirement:** CORR-01 (Phase 13) · **Mode:** audit-and-plan only — no code changed,
@@ -131,12 +133,12 @@ $ node gsd-core/bin/gsd-tools.cjs verify-summary SUMMARY.md --cwd /tmp/p13sum3
   runtime_blast_radius: all-16 # verify-summary is a runtime-agnostic engine command on every phase's verification gate
   mechanical_vs_instructional: n/a
   recommendation: "Phase 13/exec milestone: stop truncating to 2 — existence-check every file the summary marks as Created/Modified (parse the explicit 'Created:'/'Modified:' verbs rather than every backticked token to bound false positives), and drop the includes('/') filter so bare filenames are checked. Treat the 2-file cap as a verifier-reach regression, not a perf knob."
-  recall_gate: "verifier-reach / self-grading harness (the N17 exogenous-grading + #664 self-grade corpus) must show the widened check does not spike false BLOCKERs before shipping"
+  recall_gate: "verifier-reach / self-grading harness (the N17 exogenous-grading + self-grade corpus) must show the widened check does not spike false BLOCKERs before shipping"
 ```
 
 > **Reflexivity note.** The command's name promises it *verifies the summary*; behavior verifies
 > at most 2 of its claims. Narration ≠ behavior — this is the finding (charter §3.1). It is the
-> exact failure mode an external maintainer independently hit on PR #664 (self-graded review
+> exact failure mode an external maintainer independently hit on a recent upstream PR (self-graded review
 > rationalized as passing): the instrument's reach falls short of the spec it guards.
 
 ### F-CORR-02 — Malformed `.planning/config.json` silently reverts to defaults on the hot path (H-01, QW-REL-01 escalated)
@@ -202,7 +204,7 @@ src/verify.cts:131   } else if (passPattern.test(checkSection)) { selfCheck = 'p
 
 The author of the summary (the executor agent) **grades its own work**, and the verifier accepts
 "All checks pass ✅" as `self_check: "passed"`. This is *endogenous* grading — the failure mode N17
-(verifier-abstention) and PR #664's external validation both flag: an agent's self-assessment is
+(verifier-abstention) and a recent upstream PR's external validation both flag: an agent's self-assessment is
 not an independent check. In the F-CORR-01 repro the summary said "All checks pass" and the
 verifier recorded `self_check: "passed"` with no independent corroboration.
 
@@ -218,7 +220,7 @@ verifier recorded `self_check: "passed"` with no independent corroboration.
   runtime_blast_radius: all-16
   mechanical_vs_instructional: n/a
   recommendation: "Treat self_check as advisory only — never let it raise a pass it didn't earn. The pass decision (verify.cts:148) already requires missing.length===0; keep self_check OUT of the pass gate or pair it with an EXOGENOUS grade (a separate verifier pass, per N17). Document that a self-asserted 'all pass' is not evidence."
-  recall_gate: "self-grading / exogenous-grading corpus (#664 + N17) before changing the pass formula"
+  recall_gate: "self-grading / exogenous-grading corpus (the self-grade corpus + N17) before changing the pass formula"
   debt_quadrant: prudent-inadvertent
 ```
 
@@ -601,7 +603,7 @@ deliverables, the M1 reliability stream + quick-win backlog, and live `src/*.cts
 
 > **Firewall clarification (added in the M2 adversarial-review remediation, 2026-06-08).** The
 > experiment references in this sweep's recall-gate and framing prose (N17 verifier-abstention, N18
-> prohibition-elicitation, PR #664, PR #584) are **not** drawn from the firewalled prior artifacts
+> prohibition-elicitation, and the upstream edge-probe / self-grade PRs) are **not** drawn from the firewalled prior artifacts
 > (`.planning/codebase/*`, `.planning/notes/*-2026-06-05.md`, the frontier synthesis), which were
 > not opened during this phase. They are independent knowledge from the author's separate
 > experiment program (general knowledge / persistent user memory) and from public GitHub PR

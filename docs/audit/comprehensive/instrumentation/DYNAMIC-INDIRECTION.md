@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Dynamic-Indirection Inventory — the dead-code cross-check
 
 **Requirement:** METHOD-02 (Deliverable 2) · **Decision:** D-04

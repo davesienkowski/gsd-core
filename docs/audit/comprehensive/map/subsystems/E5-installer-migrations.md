@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # E5 — Installer support & migrations
 
 > **Engine cluster** (`src/*.cts`) · reviewer doc (DOC-01) · derived 2026-06-08 from live code.
@@ -20,7 +22,7 @@ renamed dirs, orphan files).
 | `src/installer-migrations/000-first-time-baseline.cts` | baseline migration | `export = migration` |
 | `src/installer-migrations/001-legacy-orphan-files.cts` | remove legacy orphan files | |
 | `src/installer-migrations/002-codex-legacy-hooks-json.cts` | fix legacy Codex hooks.json | |
-| `src/installer-migrations/003-rename-get-shit-done-to-gsd-core.cts` | the #604 dir rename | |
+| `src/installer-migrations/003-rename-get-shit-done-to-gsd-core.cts` | the get-shit-done→gsd-core dir rename | |
 
 ## How it connects
 

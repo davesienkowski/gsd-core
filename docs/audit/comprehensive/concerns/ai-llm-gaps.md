@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Concern Sweep — AI/LLM Best-Practice Gap-Check (opportunities)
 
 > **Requirement:** AI-01 (Phase 14) · **Problem type:** `external-gap` (charter §1.1) · **Mode:** audit-and-plan only

@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Source-of-Truth Map — `src/*.cts` → `gsd-core/bin/lib/*.cjs`
 
 **Requirement:** METHOD-02 (Deliverable 1) · **Decision:** D-03 · **Authority:** `tsconfig.build.json` (ADR-457)
@@ -76,7 +78,7 @@ were build artifacts of `src/`:
 
 | File | Origin | Tracked? | Audit treatment |
 |------|--------|----------|-----------------|
-| `gsd-core/bin/lib/package-identity.cjs` | **Generated** by `scripts/generate-package-identity.cjs` from `package.json` (issue #498). Has a `src/package-identity.d.cts` **type declaration only** (emits nothing). | **git-tracked** | Generated artifact. Do not audit as source; do not count its `.d.cts` as a duplicate. Edits go to the generator + `package.json`. |
+| `gsd-core/bin/lib/package-identity.cjs` | **Generated** by `scripts/generate-package-identity.cjs` from `package.json`. Has a `src/package-identity.d.cts` **type declaration only** (emits nothing). | **git-tracked** | Generated artifact. Do not audit as source; do not count its `.d.cts` as a duplicate. Edits go to the generator + `package.json`. |
 | `gsd-core/bin/lib/legacy-cleanup.cjs` | **Hand-written**, not yet migrated to `src/`. No `.cts` source. | **git-tracked** | Hand-written engine code, but in the OLD location. It is *real source* until ADR-457 migrates it. Audit the `.cjs` directly here (it IS the source). Flag as a migration-backlog item, not duplication. |
 | `gsd-core/bin/lib/edge-probe.cjs` | Hand-written, **in-flight feature** (`feat/non-inferable-pipeline` branch, dated Jun 5). No `.cts` source. | **untracked + un-gitignored** (working-tree only) | Branch-local, not mainline. Exclude from comprehensive findings unless the audit explicitly scopes the edge-probe feature. |
 | `gsd-core/bin/lib/probe-core.cjs` | Same as `edge-probe.cjs` (its shared core). | **untracked + un-gitignored** | Same — branch-local, exclude from mainline findings. |

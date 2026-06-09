@@ -1,10 +1,12 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Hotspots — churn × complexity ranking (where the deep sweeps look first)
 
 > **Requirement:** MAP-01 (Phase 8) · **Mode:** audit-and-plan only · **Derived:** 2026-06-08
 > **Scope:** `src/*.cts` (the engine, charter §0) — **never** compiled `gsd-core/bin/lib/*.cjs`.
 > **Complexity:** `reports/complexity.json` (McCabe `fileComplexity` = 1 + decision points).
 > **Churn:** `git log --follow --oneline -- <file> | wc -l` — **`--follow` is load-bearing**:
-> it tracks the file through the #537 rename (`gsd-core/bin/lib/*.cjs` → `src/*.cts`, 2026-06-02)
+> it tracks the file through the source-tree rename (`gsd-core/bin/lib/*.cjs` → `src/*.cts`, 2026-06-02)
 > so pre-migration history is **not** lost. Without `--follow` the live `src/` tree shows only
 > ~6 weeks of churn; with it, `core.cts` shows its true 142 commits back to 2026-04-26.
 

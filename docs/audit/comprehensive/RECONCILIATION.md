@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Reconciliation — Fresh Audit vs. Prior Internal Artifacts (the Firewall Delta)
 
 > **Phase 16** · Requirement **RECON-01** · **Mode:** audit-and-plan only — no code changed,
@@ -39,7 +41,7 @@ on the pre-`src/`-rename `get-shit-done/` payload), which is exactly why they fu
 independent oracle rather than an anchor.
 
 > **Why the priors are a genuine oracle, not a contaminant.** The priors were authored against the
-> `get-shit-done/bin/lib/*.cjs` layout (pre-#604 rename) and cite `.cjs` paths throughout. The
+> `get-shit-done/bin/lib/*.cjs` layout (pre-rename) and cite `.cjs` paths throughout. The
 > fresh pass re-derived everything from `src/*.cts` per charter §0. That two reads built on
 > *different path universes* still converge on the same hotspots (`core`, `init`, `bin/install.js`,
 > the config-parse split, the colon-form) is the strongest possible corroboration: the findings are
@@ -92,7 +94,7 @@ maintainer should reconcile.
 - id: F-RECON-01
   problem_type: human-friction        # the colon-form tension (D-06) — full resolution in §2
   subsystem: skills                   # commands/gsd/*.md + the install transform seam
-  file:line: "PRIOR: ARCHITECTURE.md:250 ('legacy /gsd:<cmd> is never emitted') vs ARCHITECTURE.md:258 ('leaks into agent prose after install') vs CONCERNS.md:107-111 (#3584: 'Users see wrong slash-command syntax') ─── FRESH: F-UX-07/08 (18 source command bodies emit /gsd:, incl. new-project.md:33) ─── LIVE: bin/install.js:2176, :2288, :10299-10305, :52,58 (transform allow-listed to {claude,qwen,hermes})"
+  file:line: "PRIOR: ARCHITECTURE.md:250 ('legacy /gsd:<cmd> is never emitted') vs ARCHITECTURE.md:258 ('leaks into agent prose after install') vs CONCERNS.md:107-111 (the confirmed-bug 'Users see wrong slash-command syntax') ─── FRESH: F-UX-07/08 (18 source command bodies emit /gsd:, incl. new-project.md:33) ─── LIVE: bin/install.js:2176, :2288, :10299-10305, :52,58 (transform allow-listed to {claude,qwen,hermes})"
   severity: 3                         # carries F-UX-07's severity (newcomer's first handoff); see §2
   effort: M
   risk: low
@@ -128,21 +130,21 @@ maintainer should reconcile.
   confidence: 4                       # prior cites concrete workflow lines; the hazard class is checkable, the live re-pin to gsd-core/ paths needs confirming (see note)
   runtime_blast_radius: all-16        # every runtime resolves the shim; non-Claude runtimes hit the hardcoded-$HOME bypass hardest
   mechanical_vs_instructional: n/a
-  recommendation: "Card the shim-resolution hazard the fresh correctness sweep did not reach: (1) emit a `gsd_run --version` assertion after shim resolution and fail loudly on skew (prior's fix); (2) replace hardcoded `node \"$HOME/.claude/...gsd-tools.cjs\"` calls (prior cited plan-review-convergence/ingest-docs/spec-phase/plan-phase/update) with the resolved `gsd_run`; (3) extend `audit-workflow-script-paths.cjs` to catch hardcoded $HOME paths + validate `gsd_run query <handler>` tokens against the registered handler manifest. This is the workflow-layer correctness surface; the fresh Phase-13 sweep was scoped to the engine. Confirm the prior's line numbers against the post-#604 `gsd-core/workflows/` paths before sizing."
+  recommendation: "Card the shim-resolution hazard the fresh correctness sweep did not reach: (1) emit a `gsd_run --version` assertion after shim resolution and fail loudly on skew (prior's fix); (2) replace hardcoded `node \"$HOME/.claude/...gsd-tools.cjs\"` calls (prior cited plan-review-convergence/ingest-docs/spec-phase/plan-phase/update) with the resolved `gsd_run`; (3) extend `audit-workflow-script-paths.cjs` to catch hardcoded $HOME paths + validate `gsd_run query <handler>` tokens against the registered handler manifest. This is the workflow-layer correctness surface; the fresh Phase-13 sweep was scoped to the engine. Confirm the prior's line numbers against the post-rename `gsd-core/workflows/` paths before sizing."
   recall_gate: n/a
   provenance: "Prior CONCERNS 'Runtime Resolution Shim Hazards' + 'Markdown-as-Prompt Fragility' — a correctness surface OUTSIDE the engine that Phase 13 did not sweep. Promoted, scoped to recall-the-gap (the fresh pass's MECE correctness lens should own it)."
 
 - id: F-RECON-04
   problem_type: wrongness             # build/publish fragility: stale hooks/dist + version-stamp seam (a SHIPPING defect class)
   subsystem: installer                # build-at-publish pipeline
-  file:line: "PRIOR CONCERNS.md:8-20 ('build-at-publish for hooks/dist'; '{{GSD_VERSION}} replaced at install not build' → tarball ships unreplaced literal; recurred as #1107/#1109/#1125/#1161 duplicate-const PostToolUse hook error for ALL users) ─── FRESH pass did not card the build/publish pipeline (it is outside src/ and outside the install-transform code the fresh pass read)"
+  file:line: "PRIOR CONCERNS.md:8-20 ('build-at-publish for hooks/dist'; '{{GSD_VERSION}} replaced at install not build' → tarball ships unreplaced literal; recurred as a duplicate-const PostToolUse hook error for ALL users, since fixed) ─── FRESH pass did not card the build/publish pipeline (it is outside src/ and outside the install-transform code the fresh pass read)"
   severity: 4                         # a stale/empty hooks/dist breaks hooks for EVERY user immediately after install; the prior cites it ALREADY HAPPENED once across 4 issues
   effort: M
   risk: med
   confidence: 3                       # the prior cites a real prior incident (4 issue numbers) but the fresh pass did not re-reproduce; carded at the prior's confidence, residual = re-verify the current build:hooks/prepublishOnly gate against live package.json
   runtime_blast_radius: all-16
   mechanical_vs_instructional: n/a
-  recommendation: "Card the build/publish fragility class the fresh pass missed (it sits in scripts/build-hooks.js + package.json prepublishOnly, outside src/): (1) a CI pre-publish gate asserting hooks/dist is byte-identical to a fresh build (or commit hooks/dist); (2) stamp {{GSD_VERSION}} in build-hooks.js from package.json, not in install.js, so the tarball is self-consistent. The prior shows this is not theoretical — it shipped a hook-breaking duplicate-const to all users (#1107 cluster). RE-VERIFY against live package.json/scripts before sizing (the prior is 2026-06-05). This overlaps F-CORR-08's 'installer guard' theme but is a distinct SHIPPING-integrity defect, not a first-run config defect."
+  recommendation: "Card the build/publish fragility class the fresh pass missed (it sits in scripts/build-hooks.js + package.json prepublishOnly, outside src/): (1) a CI pre-publish gate asserting hooks/dist is byte-identical to a fresh build (or commit hooks/dist); (2) stamp {{GSD_VERSION}} in build-hooks.js from package.json, not in install.js, so the tarball is self-consistent. The prior shows this is not theoretical — it shipped a hook-breaking duplicate-const to all users (the prior hooks/dist incident cluster). RE-VERIFY against live package.json/scripts before sizing (the prior is 2026-06-05). This overlaps F-CORR-08's 'installer guard' theme but is a distinct SHIPPING-integrity defect, not a first-run config defect."
   recall_gate: n/a
   provenance: "Prior CONCERNS 'Build/Publish Fragility' — a real, recurred shipping defect class the fresh correctness/maintainability sweeps did not reach. Promoted; re-verify residual flagged (charter §3.4.4)."
 ```
@@ -167,7 +169,7 @@ either folded into an existing fresh card, carded, or recorded as superseded.
 |---|---|---|
 | **Prompt-injection surface** — GSD-written `.md` re-enters LLM context; needs `sanitizeForDisplay()` consistency (CONCERNS "Security") | Live: `security.cjs`/`secrets.cjs`/`hooks/gsd-*-injection-scanner` + `scripts/prompt-injection-scan.sh` CI check all exist. The fresh charter scoped the audit to bloat/maint/correctness/AI-gap/UX — **security was not a fresh lens.** The concern is valid and live-relevant. | **CARDED → F-RECON-05** (below): a genuine prior-only lens the fresh taxonomy did not cover. |
 | **`GSD_AUDIT_ARGS=1` may log API keys** (audit-log path bypasses `maskIfSecret`) (CONCERNS "Security") | Opt-in, default-redacted; concrete file:line in prior. Not a fresh lens. | Folded into **F-RECON-05** (security cluster) — secondary item; re-verify the audit-log mask path. |
-| **`npm audit`: 1 high + 5 moderate via `@anthropic-ai/claude-agent-sdk`** (#3588) (CONCERNS "Dependencies at Risk") | `npm audit` re-run read-only 2026-06-08 (M2 adversarial-review follow-up): **`found 0 vulnerabilities`** (the `^0.2.84` range resolved to the patched `claude-agent-sdk@0.2.141`). The 2026-06-05 "1 high + 5 mod" count is **STALE/RESOLVED**. `git diff package-lock.json` empty — `npm audit` (read) does not mutate the lockfile, so the prior deferral rationale was wrong. | **F-RECON-05 npm-advisory facet DOWNGRADED to RESOLVED.** The security-LENS taxonomy point + the injection-consistency / `GSD_AUDIT_ARGS` mask facets stand (not run-verified). See F-CI-01 (`build-ci-hooks.md`): no `npm audit` gate in CI to catch future drift. |
+| **`npm audit`: 1 high + 5 moderate via `@anthropic-ai/claude-agent-sdk`** (the prior advisory) (CONCERNS "Dependencies at Risk") | `npm audit` re-run read-only 2026-06-08 (M2 adversarial-review follow-up): **`found 0 vulnerabilities`** (the `^0.2.84` range resolved to the patched `claude-agent-sdk@0.2.141`). The 2026-06-05 "1 high + 5 mod" count is **STALE/RESOLVED**. `git diff package-lock.json` empty — `npm audit` (read) does not mutate the lockfile, so the prior deferral rationale was wrong. | **F-RECON-05 npm-advisory facet DOWNGRADED to RESOLVED.** The security-LENS taxonomy point + the injection-consistency / `GSD_AUDIT_ARGS` mask facets stand (not run-verified). See F-CI-01 (`build-ci-hooks.md`): no `npm audit` gate in CI to catch future drift. |
 | **CHANGELOG.md 192.7 KB scaling limit** (gsd update parses it from raw.githubusercontent) (CONCERNS "Scaling Limits") | A forward-looking scaling concern, not a present defect; outside all five fresh lenses (it is neither waste nor a present wrong-result). | **Recorded, not carded.** Legitimate but low-urgency and orthogonal to the audit's MECE taxonomy; handed to Phase 17 as a "prior-noted scaling watch item," not a scored finding. |
 | **Subagent-spawning parity undefined for most runtimes; no cross-runtime e2e install test** (CONCERNS "Multi-Runtime Drift" / "Missing Critical Features") | Overlaps the fresh **F-MAINT-07** (the per-runtime first-run trace = the integration-test gap, H-04 residual) and **F-CORR-06/08** (runtime divergence). The fresh pass DID reach this — as a flagged *residual*, not a missed concern. | **Already covered** by F-MAINT-07 + the H-04 residual; this reconciliation **raises confidence** on F-MAINT-07 (an independent reader named the same gap). Not a new card. |
 | **Fragile Areas — the advisory `withPlanningLock()` worktree-parallel deadlock** (a held lock blocks all other agents indefinitely) (prior CONCERNS "Fragile Areas") — *added to the ledger in the M2 adversarial-review remediation; previously omitted* | Re-checked live 2026-06-08: `src/planning-workspace.cts:117-184` now bounds the wait — a **10s acquisition timeout** (`:120,:146`), **30s stale-lock recovery** (`:166-169`), and a timeout-path force-break + re-acquire (`:180-183`). The prior's *indefinite* deadlock does **not** reproduce: a contending agent waits ≤10s then breaks a stale/held lock. Residual nuance: the timeout force-break (`:181-183`) could break a lock still held by a slow-but-alive holder — a narrow correctness edge, not the indefinite deadlock. | **Recorded — superseded for the indefinite-deadlock claim** (mitigated by the timeout + stale-recovery). The narrow force-break-while-alive edge is low-severity and below the per-sweep severity floor (charter §3.4.3); noted here, not carded. |
@@ -177,14 +179,14 @@ either folded into an existing fresh card, carded, or recorded as superseded.
 - id: F-RECON-05
   problem_type: wrongness             # security was not one of the five fresh lenses — a genuine taxonomy gap surfaced by the prior
   subsystem: engine                   # security.cjs/secrets.cjs + observability/redaction + dependency surface
-  file:line: "PRIOR CONCERNS.md:122-138 (prompt-injection sanitize consistency; GSD_AUDIT_ARGS=1 secret-leak; npm-audit 1 high+5 mod via claude-agent-sdk #3588 — STALE/RESOLVED). FRESH: the AUDIT-CHARTER 5-type taxonomy (bloat/maint/correctness/AI-gap/UX) has NO security lens."
+  file:line: "PRIOR CONCERNS.md:122-138 (prompt-injection sanitize consistency; GSD_AUDIT_ARGS=1 secret-leak; npm-audit 1 high+5 mod via the claude-agent-sdk advisory — STALE/RESOLVED). FRESH: the AUDIT-CHARTER 5-type taxonomy (bloat/maint/correctness/AI-gap/UX) has NO security lens."
   severity: 3                         # the LENS gap + two live facets (secret-logging path, injection-sanitize consistency) are real; the npm-advisory facet is now RESOLVED (0 vulns 2026-06-08)
   effort: M
   risk: low                           # mostly additive guards
   confidence: 3                       # prior cites concrete file:line; the two guard facets not reproduced fresh; the npm-audit facet IS now run-verified (0 vulns)
   runtime_blast_radius: all-16
   mechanical_vs_instructional: n/a
-  recommendation: "Surface security as a roadmap concern-area the fresh five-lens taxonomy did not own. Carry-forwards, each re-verified before action: (1) ensure every gsd_run handler that writes .planning/*.md routes through sanitizeForDisplay() (prompt-injection consistency); (2) apply maskIfSecret on the GSD_AUDIT_ARGS=1 audit-log path; (3) [RESOLVED] npm audit re-run read-only 2026-06-08 = 0 vulnerabilities (the ^0.2.84 range resolved to the patched claude-agent-sdk@0.2.141) — the prior's #3588 '1 high + 5 mod' is stale and the package.json-overrides recommendation is a no-op; close this facet. (The deferral rationale 'would mutate lockfile state' was wrong — `npm audit` read does not touch the lockfile.) NOTE for Phase 17: this is the one place the charter's MECE taxonomy has a true gap — security findings have no home type. Phase 17 decision (§1 of FINDINGS): typed wrongness + tag:security. Do NOT silently drop facets (1)/(2). See F-CI-01 for the missing CI advisory gate."
+  recommendation: "Surface security as a roadmap concern-area the fresh five-lens taxonomy did not own. Carry-forwards, each re-verified before action: (1) ensure every gsd_run handler that writes .planning/*.md routes through sanitizeForDisplay() (prompt-injection consistency); (2) apply maskIfSecret on the GSD_AUDIT_ARGS=1 audit-log path; (3) [RESOLVED] npm audit re-run read-only 2026-06-08 = 0 vulnerabilities (the ^0.2.84 range resolved to the patched claude-agent-sdk@0.2.141) — the prior advisory's '1 high + 5 mod' is stale and the package.json-overrides recommendation is a no-op; close this facet. (The deferral rationale 'would mutate lockfile state' was wrong — `npm audit` read does not touch the lockfile.) NOTE for Phase 17: this is the one place the charter's MECE taxonomy has a true gap — security findings have no home type. Phase 17 decision (§1 of FINDINGS): typed wrongness + tag:security. Do NOT silently drop facets (1)/(2). See F-CI-01 for the missing CI advisory gate."
   recall_gate: n/a
   provenance: "Prior CONCERNS 'Security Considerations' + 'Dependencies at Risk' — an entire lens the fresh charter did not include. Promoted as the highest-value prior-only contribution."
 ```
@@ -206,7 +208,7 @@ matches one side of the fresh tension:
   `/gsd:<cmd>` (colon) is **never emitted**."* — matches M1's "not user-visible" framing.
 - `ARCHITECTURE.md:258` (the *anti-pattern* admission, same file): colon form *"**leaks into agent
   prose after install**"* — matches Phase 15's "user-facing" finding.
-- `CONCERNS.md:107-111` (issue **#3584**, `confirmed-bug`): *"At least 16 `.cjs` files … still emit
+- `CONCERNS.md:107-111` (a `confirmed-bug`): *"At least 16 `.cjs` files … still emit
   … `/gsd:<cmd>` … **Users see wrong slash-command syntax in GSD output** … Higher impact on
   runtimes where `/gsd:cmd` is not a valid command form."*
 
@@ -234,7 +236,7 @@ So the prior **already adjudicated this**: colon-form IS user-facing (a confirme
 3. **It LEAKS for runtimes outside the allow-list, and the SOURCE is the seed (the prior map is
    correct).** The transform is an *allow-list*, not universal; any installed hyphen-namespace
    runtime not in `{claude, qwen, hermes}` leaks colon-form into prose — exactly the prior's
-   #3584 "leaks after install." And because the **source** still carries it, every new command
+   "leaks after install." And because the **source** still carries it, every new command
    and every hand-edit re-seeds the leak.
 
 **The reconciled finding (carded as F-RECON-01).** The tension is **not** "M1 wrong, Phase 15
@@ -273,7 +275,7 @@ it did not overwrite the independent read.** Concretely:
 - **Where the prior was the weaker read, the fresh pass wins by construction** (D-05: fresh is the
   system of record). Example: the prior's `ARCHITECTURE.md:250` "never emitted" aspiration is
   *not* adopted over the fresh F-UX-08 measurement; the fresh measurement stands and the prior's
-  own #3584 entry corroborates it.
+  own confirmed-bug entry corroborates it.
 
 **One reliability note carried from the priors.** The frontier-research synthesis self-flags that
 it was produced by LLM researchers and that **1 of 3 spot-checked citations was inverted** (the
@@ -298,7 +300,7 @@ prior's "50% tamper" figure UNVERIFIED for this reason.
 cards. F-RECON-05 carries a **taxonomy flag**: the charter's five problem types have no `security`
 home — Phase 17 must decide (treat severe security as `wrongness`, or add a security annotation) and
 must not drop the prior's security items. F-RECON-03/04/05 each carry a **re-verify residual** (the
-priors are 2026-06-05, pre-#604; confirm line numbers/advisory counts against live before sizing).
+priors are 2026-06-05, pre-rename; confirm line numbers/advisory counts against live before sizing).
 
 ---
 
@@ -306,7 +308,7 @@ priors are 2026-06-05, pre-#604; confirm line numbers/advisory counts against li
 
 **F-RECON-04 (build/publish fragility) is the most significant disagreement** — not because it is
 the loudest, but because it is the only one the prior shows *already shipped a defect to every
-user* (the `hooks/dist` duplicate-const PostToolUse error, #1107/#1109/#1125/#1161). The fresh
+user* (the `hooks/dist` duplicate-const PostToolUse error, since fixed). The fresh
 pass, scoped to `src/*.cts` + the install-transform code, never reached the `scripts/build-hooks.js`
 + `package.json prepublishOnly` seam, so a **severity-4, all-16, historically-realized** shipping
 defect class was entirely absent from the fresh register. The colon-form resolution (F-RECON-01)

@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # References & Contexts — `gsd-core/references/`, `gsd-core/contexts/`
 
 > **Non-engine subsystem** (69 + 3 files) · reviewer doc (DOC-01) · derived 2026-06-08.

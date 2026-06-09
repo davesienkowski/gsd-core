@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Supplementary Concern Sweep — Build / CI / Hooks / Scripts
 
 > **Origin:** the M2 adversarial red-team (`review/ADVERSARIAL-M2-PROCESS.md` §5 GENUINE GAP 2)
@@ -26,7 +28,7 @@ CI; `.sh` hooks skip the syntax-validation gate that protects the `.js` hooks).
 
 | Theme | Verdict |
 |-------|---------|
-| **F-RECON-04 hooks/dist defect class (#1107/1109/1125/1161)** | **RESOLVED.** `scripts/build-hooks.js` now syntax-validates every `.js` hook (`vm.Script`) before copy and `exit 1`s on any SyntaxError. All 13 live JS hooks pass; no duplicate-const present. |
+| **F-RECON-04 hooks/dist defect class (the prior duplicate-const PostToolUse hook shipped to users)** | **RESOLVED.** `scripts/build-hooks.js` now syntax-validates every `.js` hook (`vm.Script`) before copy and `exit 1`s on any SyntaxError. All 13 live JS hooks pass; no duplicate-const present. |
 | **CI action pinning (supply-chain)** | **STRONG.** All 60 `uses:` refs are 40-hex SHA-pinned; zero mutable tags. |
 | **CI token scope** | **STRONG.** All 23 workflows declare a `permissions:` block; release/publish jobs are least-privilege per-job. |
 | **npm publish gating** | **STRONG.** OIDC trusted publishing + `--provenance`, `environment: npm-publish` gate, install-smoke prerequisite, dry-run validation, already-published rejection. |
@@ -43,7 +45,7 @@ CI; `.sh` hooks skip the syntax-validation gate that protects the `.js` hooks).
 |----|------|:--------:|-------|----------|
 | **F-BUILD-02** | change-cost | 3 | pre-commit hook fully stale: 10 guards key on the retired `sdk/` tree + dropped `check:*-fresh` scripts | grep + ls |
 | **F-CI-01** | wrongness | 2 | no `npm audit` / advisory gate in CI or scripts — supply-chain advisory drift unmonitored except weekly dependabot | grep |
-| **F-BUILD-01** | wrongness | 2 | `build-hooks.js` syntax-validates `.js` hooks but skips `.sh` hooks — the #1107-class gate does not cover the 4 shipped shell hooks | build-hooks.js:158-159,205 |
+| **F-BUILD-01** | wrongness | 2 | `build-hooks.js` syntax-validates `.js` hooks but skips `.sh` hooks — the gate that closed the prior hooks/dist defect class does not cover the 4 shipped shell hooks | build-hooks.js:158-159,205 |
 | **F-BUILD-03** | change-cost | 1 | `hooks/dist` is gitignored build-output (regenerated only at publish) with no byte-identical drift gate; the prior's "tarball self-consistency" residual | .gitignore + build-hooks.js |
 
 **Severity tally:** 0 critical, 0 high, 1 med (3), 2 low (2), 1 trivial (1).
@@ -89,14 +91,14 @@ CI; `.sh` hooks skip the syntax-validation gate that protects the `.js` hooks).
   problem_type: wrongness
   subsystem: installer          # the build/publish seam (scripts/build-hooks.js)
   file:line: "scripts/build-hooks.js:158-159 (`if (hook.endsWith('.js'))` gates validateSyntax — .sh files skip) and :205 (subdir loop, same .js-only gate); 4 shipped .sh hooks (gsd-session-state/gsd-validate-commit/gsd-phase-boundary/gsd-graphify-update) copied without any validation"
-  severity: 2                   # a broken shell hook ships to all users the same way the #1107 .js hook did; the validator added to prevent that does not cover .sh
+  severity: 2                   # a broken shell hook ships to all users the same way the prior duplicate-const .js hook did; the validator added to prevent that does not cover .sh
   effort: S                     # add a `bash -n`/`sh -n` syntax check for .sh hooks in build-hooks.js (skipped on Windows runners where bash may be absent — degrade gracefully)
   risk: low                     # additive check; can warn-not-fail where a shell is unavailable
   confidence: 5                 # the .js-only gate is the literal condition at :158-159 and :205; the .sh hooks are in HOOKS_TO_COPY (:48-53)
   runtime_blast_radius: all-16  # a broken .sh hook installs to every runtime that opts into community/graphify hooks
   mechanical_vs_instructional: n/a
-  cross_check: "The same defect CLASS the .js validateSyntax() guards (#1107/1109/1125/1161 — a broken hook shipped to all users). The .js gate is the fix; the .sh hooks (community + graphify, opt-in) are the uncovered remainder. Opt-in lowers blast vs the always-on .js hooks, hence sev 2 not 4."
-  recommendation: "Extend build-hooks.js validation to .sh hooks (`bash -n`), guarded so a runner without bash degrades to a warning rather than failing the build. Closes the shell half of the #1107 defect class the .js validator already closes."
+  cross_check: "The same defect CLASS the .js validateSyntax() guards (the prior hooks/dist defect class — a broken hook shipped to all users). The .js gate is the fix; the .sh hooks (community + graphify, opt-in) are the uncovered remainder. Opt-in lowers blast vs the always-on .js hooks, hence sev 2 not 4."
+  recommendation: "Extend build-hooks.js validation to .sh hooks (`bash -n`), guarded so a runner without bash degrades to a warning rather than failing the build. Closes the shell half of the prior hooks/dist defect class the .js validator already closes."
   recall_gate: n/a
 
 - id: F-BUILD-03
@@ -121,16 +123,16 @@ CI; `.sh` hooks skip the syntax-validation gate that protects the `.js` hooks).
 ## 3. F-RECON-04 build/publish defect class — RESOLVED (verified this sweep)
 
 The red-team (`ADVERSARIAL-M2-PROCESS.md` §5) asked specifically whether the F-RECON-04 defect
-class (the `hooks/dist` duplicate-const PostToolUse error shipped to all users, #1107/#1109/#1125/
-#1161) is still present. **It is resolved.**
+class (the `hooks/dist` duplicate-const PostToolUse error shipped to all users) is still present.
+**It is resolved.**
 
 - `scripts/build-hooks.js:117-134` defines `validateSyntax(filePath)` which compiles each file with
   `new vm.Script(content)` and returns the `SyntaxError` message (without executing).
 - `scripts/build-hooks.js:159-166` runs it on every `.js` hook before copy; on any syntax error it
   sets `hasErrors` and **`process.exit(1)`** (`:230-233`) — the build fails rather than shipping a
   broken hook.
-- The file's own header docstring (`:2-7`) cites **#1107, #1109, #1125, #1161** as the exact
-  incident this guard was added to prevent.
+- The file's own header docstring (`:2-7`) cites the prior duplicate-const incident cluster as the
+  exact incident this guard was added to prevent.
 - **Live verification:** compiling all 13 shipped `.js` hooks with `vm.Script` → **0 syntax errors**;
   no duplicate-const present in the current tree.
 

@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Tests — `tests/`
 
 > **Non-engine subsystem** (721 files; 664 `*.test.cjs`) · reviewer doc (DOC-01) · derived 2026-06-08.

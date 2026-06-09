@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Concern Sweep — Maintainability (change-cost lens)
 
 > **Requirement:** Phase 12 SC-4 (the maintainability / `change-cost` lens) ·

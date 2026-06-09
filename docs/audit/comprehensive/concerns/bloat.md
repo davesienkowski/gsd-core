@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Concern Sweep — Bloat (BLOAT-01..04)
 
 > **Requirement:** BLOAT-01, BLOAT-02, BLOAT-03, BLOAT-04 (terminal, Phase 12) ·

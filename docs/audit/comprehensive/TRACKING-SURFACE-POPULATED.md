@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # TRACKING-SURFACE-POPULATED.md — Full Item Set + Import Commands (Milestone 2)
 
 > **A view over `FINDINGS.md`.** This populates the Phase-1 tracking surface
@@ -88,7 +90,7 @@ Ordered by `priority` desc, then id. Every row is import-ready (matches the `FIN
 | 30 | F-UX-08 | human-friction | skills | 2 | M | low | 5 | all-14+ | mech | 18 commands/gsd/*.md |
 | 30 | F-UX-13 | human-friction | docs | 2 | M | low | 5 | none | mech | install-profiles.cts:27-58 |
 | 27 | F-RECON-02 | external-gap (tag:security) | agents | 3 | M | med | 3 | multi | n/a | frontier-synthesis:71,118 |
-| 27 | F-RECON-05 | wrongness (tag:security) | engine | 3 | M | low | 3 | all-16 | n/a | security.cts/secrets.cts + #3588 |
+| 27 | F-RECON-05 | wrongness (tag:security) | engine | 3 | M | low | 3 | all-16 | n/a | security.cts/secrets.cts + claude-agent-sdk advisory |
 | 25 | F-CORR-07b | wrongness | engine | 1 | S | low | 5 | claude-only | n/a | src/drift.cts:252-270 |
 | 24 | F-BLOAT-10 | waste (tag:security) | agents | 2 | M | high | 4 | all-16 | instr | 8 agents, ctx7 guard variants |
 | 24 | F-BLOAT-16 | waste | engine | 2 | M | high | 4 | multi | n/a | 11 *-command-router.cts |

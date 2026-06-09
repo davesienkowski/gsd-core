@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Runtime Divergence Matrix — the blast-radius oracle
 
 **Requirement:** METHOD-02 (Deliverable 3) · **Decision:** D-05
@@ -33,7 +35,7 @@ the filename prefix. **slash**: how a `/gsd-*` reference is emitted to the user.
 | Runtime | Global config dir (env override → default) | Artifact kinds (dest · prefix) | Slash form | Notes |
 |---------|--------------------------------------------|--------------------------------|-----------|-------|
 | **claude** | `CLAUDE_CONFIG_DIR` → `~/.claude` | global: skills (`skills` · `gsd-`); local: commands (`commands/gsd` · `gsd-`) + agents (`agents` · `gsd-`) | `/gsd-<cmd>` | scope-dependent layout (local vs global differ) |
-| **cursor** | `CURSOR_CONFIG_DIR` → `~/.cursor` | skills (`skills` · `gsd-`) **+** convCmds (`commands` · `gsd-`) | `/gsd-<cmd>` | two surfaces (1.6+): rich skills + plain `/` commands (#785) |
+| **cursor** | `CURSOR_CONFIG_DIR` → `~/.cursor` | skills (`skills` · `gsd-`) **+** convCmds (`commands` · `gsd-`) | `/gsd-<cmd>` | two surfaces (1.6+): rich skills + plain `/` commands |
 | **gemini** | `GEMINI_CONFIG_DIR` → `~/.gemini` | commands (`commands/gsd` · `gsd-`) | `/gsd-<cmd>` | commands-only |
 | **codex** | `CODEX_HOME` → `~/.codex` | skills (`skills` · `gsd-`) | **`$gsd-<cmd>`** | shell-var slash form; command token lowercased (`runtime-slash.cts:58-63`) |
 | **grok** | `GROK_AGENTS_HOME` → `~/.agents` | **none** (no layout arm) | `/gsd-<cmd>` | homes-only; layout throws TypeError by design |
@@ -43,9 +45,9 @@ the filename prefix. **slash**: how a `/gsd-*` reference is emitted to the user.
 | **augment** | `AUGMENT_CONFIG_DIR` → `~/.augment` | commands (`commands` · `gsd-`) **+** skills (`skills` · `gsd-`) | `/gsd-<cmd>` | two surfaces |
 | **trae** | `TRAE_CONFIG_DIR` → `~/.trae` | skills (`skills` · `gsd-`) | `/gsd-<cmd>` | |
 | **qwen** | `QWEN_CONFIG_DIR` → `~/.qwen` | skills (`skills` · `gsd-`) | `/gsd-<cmd>` | uses the Claude skill converter |
-| **hermes** | `HERMES_HOME` → `~/.hermes` | skills (**`skills/gsd`** · **`''`** no prefix) | `/gsd-<cmd>` | **nested** `skills/gsd/<name>/` layout + empty prefix (#2841) — divergent |
-| **codebuddy** | `CODEBUDDY_CONFIG_DIR` → `~/.codebuddy` | convCmds (`commands` · `gsd-`) **+** skills (`skills` · `gsd-`, emitted `user-invocable:false`) | `/gsd-<cmd>` | commands are sole `/` entry; skills hidden from `/` (#789) |
-| **cline** | `CLINE_CONFIG_DIR` → `~/.cline` | global: skills (`skills` · `gsd-`); **local: none** | `/gsd-<cmd>` | skills only when global (≥ v3.48.0, #782); also emits `.clinerules` |
+| **hermes** | `HERMES_HOME` → `~/.hermes` | skills (**`skills/gsd`** · **`''`** no prefix) | `/gsd-<cmd>` | **nested** `skills/gsd/<name>/` layout + empty prefix — divergent |
+| **codebuddy** | `CODEBUDDY_CONFIG_DIR` → `~/.codebuddy` | convCmds (`commands` · `gsd-`) **+** skills (`skills` · `gsd-`, emitted `user-invocable:false`) | `/gsd-<cmd>` | commands are sole `/` entry; skills hidden from `/` |
+| **cline** | `CLINE_CONFIG_DIR` → `~/.cline` | global: skills (`skills` · `gsd-`); **local: none** | `/gsd-<cmd>` | skills only when global (≥ v3.48.0); also emits `.clinerules` |
 | **opencode** | `OPENCODE_CONFIG_DIR` ∥ `OPENCODE_CONFIG` ∥ `XDG_CONFIG_HOME/opencode` → `~/.config/opencode` | commands (**`command`** · `gsd-`) **+** skills (`skills` · `gsd-`) | `/gsd-<cmd>` | **XDG**-based; dest dir is singular `command/` |
 | **kilo** | `KILO_CONFIG_DIR` ∥ `KILO_CONFIG` ∥ `XDG_CONFIG_HOME/kilo` → `~/.config/kilo` | commands (**`command`** · `gsd-`) **+** skills (`skills` · `gsd-`) | `/gsd-<cmd>` | **XDG** for commands; **skills live at `~/.kilo/skills/` (HOME-relative, NOT the XDG config dir)** — `runtime-homes.cts:175` |
 

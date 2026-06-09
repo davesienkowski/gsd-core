@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Phase 7 — Full Instrumentation (Comprehensive Audit)
 
 **Requirement:** METHOD-02 · **Milestone:** 2 (Comprehensive Audit) · **Status:** plan-only

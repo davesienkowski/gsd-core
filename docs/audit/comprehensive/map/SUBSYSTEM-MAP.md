@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Subsystem Map — GSD-Core (fresh re-derivation)
 
 > **Requirement:** MAP-01 (Phase 8) · **Mode:** audit-and-plan only (no code changed)

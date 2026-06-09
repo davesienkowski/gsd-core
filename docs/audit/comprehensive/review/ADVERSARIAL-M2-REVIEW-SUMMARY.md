@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # Adversarial M2 Review — Synthesis & Remediation Summary
 
 > **What this is.** The single synthesis of BOTH Milestone-2 red-team passes
@@ -26,7 +28,7 @@ Two hostile, falsify-first reviews attacked M2 from different angles. Both concl
 | PROCESS §5 GAP 3 | RECONCILIATION "every prior section addressed" overstated (2 sections missing) | MEDIUM | completeness | **FIXED** — Fragile-Areas + Performance rows added to the ledger |
 | EVIDENCE A-09 | "724 colon-form refs" stale (reproduces 1073) | MINOR | count | **FIXED** — 724→1073 in bloat.md, FINDINGS, roadmap |
 | EVIDENCE A-05 | "18 docs say Node 18+" stale (grep reproduces 22) | MINOR | count | **FIXED** — corrected to 22 (16 user-facing + 6 audit self-refs) |
-| EVIDENCE A-10 | `pipeline-correctness.md` cites prior-experiment IDs (N17/N18/#664/#584) under a "firewall honored" attestation | MINOR | firewall consistency | **FIXED** — one-line clarification: IDs are independent knowledge, not firewalled-prior seepage |
+| EVIDENCE A-10 | `pipeline-correctness.md` cites prior-experiment IDs (N17/N18 + the upstream edge-probe/self-grade PRs) under a "firewall honored" attestation | MINOR | firewall consistency | **FIXED** — one-line clarification: IDs are independent knowledge, not firewalled-prior seepage |
 | EVIDENCE A-03 | F-AIGAP-02 "golden/balanced/budget … same model" true only for **balanced** | MINOR | framing | NOTED (the cited evidence `:116,122` + the gap stand; see §5 residual) |
 | EVIDENCE A-04/A-08 | off-by-one line citations (slug `1919-1920`→`1919-1921`; validate catches `742/847`→`743/848`) | MINOR | cosmetic | NOTED (cosmetic; cited-only cards otherwise correct — see §5 residual) |
 
@@ -69,7 +71,7 @@ build/publish scripts (`scripts/`, `bin/install.js`). **4 new findings** (regist
 | **F-BUILD-03** | change-cost (build) | 1 | 20 | no byte-identical drift gate on the gitignored `hooks/dist` (= F-RECON-04 rec #1) |
 
 **The hooks/dist defect-class question (red-team's specific ask): RESOLVED.** The F-RECON-04
-duplicate-const PostToolUse error shipped to all users (#1107/#1109/#1125/#1161) is **closed in the
+duplicate-const PostToolUse error shipped to all users (since fixed) is **closed in the
 current tree** — `scripts/build-hooks.js:122-134` now `vm.Script`-validates every `.js` hook before
 copy and `process.exit(1)`s on any SyntaxError; the file's docstring cites those exact issues; all
 13 live JS hooks compile clean. The residuals are the narrower F-BUILD-01 (`.sh` uncovered) and
@@ -84,8 +86,8 @@ refs SHA-pinned; all 23 workflows declare `permissions:`; release uses OIDC trus
 |------|--------|-------------------------------|
 | **B1 F-BLOAT-09 colon count** | "724 colon-form refs" | **1073** (`grep -rho '/gsd:' agents/ commands/ gsd-core/ \| wc -l`; agents 96 + commands 38 + gsd-core 939) — fixed in bloat.md, FINDINGS, IMPROVEMENT-ROADMAP |
 | **B2 F-CORR-08 Node-doc count** | "18 files / 18 onboarding docs" | **22** grep matches (16 user-facing onboarding/translation docs + 6 audit/stream self-references) — fixed in pipeline-correctness.md + FINDINGS |
-| **B3 F-RECON-05 npm advisory** | "1 high + 5 moderate via claude-agent-sdk #3588" (deferred, deferral rationale wrong) | **`npm audit` = 0 vulnerabilities** (claude-agent-sdk resolved to patched **0.2.141**; ws 8.20.1; lockfile unchanged). That facet **downgraded to RESOLVED**; the security-LENS taxonomy point + injection/mask facets stand. |
-| **B4 firewall attestation** | N17/N18/#664/#584 cited under "firewall honored" | one-line clarification added: the experiment IDs are independent knowledge (user memory / public PRs), not the firewalled `.planning/codebase/*` or `*-2026-06-05.md` priors (which were not opened) |
+| **B3 F-RECON-05 npm advisory** | "1 high + 5 moderate via the claude-agent-sdk advisory" (deferred, deferral rationale wrong) | **`npm audit` = 0 vulnerabilities** (claude-agent-sdk resolved to patched **0.2.141**; ws 8.20.1; lockfile unchanged). That facet **downgraded to RESOLVED**; the security-LENS taxonomy point + injection/mask facets stand. |
+| **B4 firewall attestation** | N17/N18 + the upstream edge-probe/self-grade PRs cited under "firewall honored" | one-line clarification added: the experiment IDs are independent knowledge (user memory / public PRs), not the firewalled `.planning/codebase/*` or `*-2026-06-05.md` priors (which were not opened) |
 | **B5 RECONCILIATION completeness** | "every prior section addressed" overstated | "Fragile Areas" (lock deadlock) + "Performance Bottlenecks" added to the ledger; deadlock recorded as **superseded** (live 10s timeout + 30s stale-recovery in `planning-workspace.cts:117-184` defeats the *indefinite* deadlock); performance recorded-not-carded (no MECE lens) |
 | **B6 scope caveat** | whole-repo claim read as exhaustive | MAP-01/CORR-01 caveat added (FINDINGS §0): fresh sweep was `src/*.cts`-scoped; Task A extends coverage to CI/hooks/scripts |
 

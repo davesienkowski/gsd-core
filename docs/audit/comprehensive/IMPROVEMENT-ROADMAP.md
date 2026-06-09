@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # IMPROVEMENT-ROADMAP.md — The Hybrid-Matrix Improvement Roadmap (Milestone 2)
 
 > **The audit's delivered product.** A 4+ person execution team should be able to open this file,
@@ -95,7 +97,7 @@ carries: priority, severity, effort, risk, subsystem, runtime blast radius, cita
 | A12 | F-CORR-07 | 24 | 2 | M | low | engine | none | Three inconsistent "data-not-present" contracts across read commands |
 | A13 | F-CORR-07b | 25 | 1 | S | low | engine | claude-only | Drift exception branch returns an empty human message — `src/drift.cts:252-270` |
 | A17 | **F-CI-01** | 50 | 2 | S | low | tests (CI) | none | No `npm audit`/advisory gate in CI (only lockfile-consistency + weekly dependabot) — `concerns/build-ci-hooks.md`; `tag:security` |
-| A18 | **F-BUILD-01** | 50 | 2 | S | low | installer | all-16 | `build-hooks.js` syntax-validates `.js` hooks but skips the 4 `.sh` hooks — the #1107 defect class uncovered for shell — `scripts/build-hooks.js:158-159,205` |
+| A18 | **F-BUILD-01** | 50 | 2 | S | low | installer | all-16 | `build-hooks.js` syntax-validates `.js` hooks but skips the 4 `.sh` hooks — the prior hooks/dist defect class uncovered for shell — `scripts/build-hooks.js:158-159,205` |
 
 **Security & Exposure sub-group** (typed `wrongness`/`external-gap` + `tag: security`):
 

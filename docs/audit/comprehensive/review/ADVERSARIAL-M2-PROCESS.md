@@ -1,3 +1,5 @@
+> 📋 **[Audit Summary →](https://github.com/davesienkowski/gsd-core/blob/audit/comprehensive-audit/docs/audit/AUDIT-SUMMARY.md)** — one-page browsable index of every audit finding & suggested fix (M1 newcomer quick-wins + M2 comprehensive). Start here.
+
 # ADVERSARIAL-M2-PROCESS.md — Hostile Red-Team Review of Milestone 2
 
 > **Reviewer stance:** hostile, falsifying. Goal: break the "passed / no gaps" self-reports of the
@@ -111,7 +113,7 @@ severe-escalation rule (sev≥4 floats to the top of Correctness) is reasonable.
 **Are the prior's security items scored, not dropped? Mostly yes — with one staleness defect.**
 - Prompt-injection consistency → F-RECON-05 ✓
 - `GSD_AUDIT_ARGS=1` secret-log → F-RECON-05 ✓
-- npm advisory (#3588) → F-RECON-05 ✓ *(but stale — see §5)*
+- npm advisory (claude-agent-sdk) → F-RECON-05 ✓ *(but stale — see §5)*
 - Harness-tamper (frontier prior) → F-RECON-02 ✓
 - `ws`/SDK supply-chain → F-BLOAT-01 xref ✓
 
@@ -133,7 +135,7 @@ The audit (FINDINGS §2, RECONCILIATION line 161, Phase-17 VERIFICATION) repeate
 - **I ran it.** Result: **`found 0 vulnerabilities`** (both `--omit=dev` and full; metadata shows
   0 info/low/moderate/high/critical). Installed `@anthropic-ai/claude-agent-sdk@0.2.141` (the `^0.2.84`
   range pulled the patched line); `ws@8.20.1`.
-- **Impact:** the prior's "1 high + 5 moderate via #3588" is **stale**. F-RECON-05's security severity
+- **Impact:** the prior's "1 high + 5 moderate via the claude-agent-sdk advisory" is **stale**. F-RECON-05's security severity
   is overstated on its most concrete facet; the recommended "package.json overrides for the
   claude-agent-sdk advisories" is now a no-op. The card is honest that it *might* have moved — but a
   one-command, non-mutating check that flips a live finding to closed should have been run.
@@ -153,7 +155,7 @@ or `ci`. Confirmed: `grep 'subsystem: (hooks|scripts|ci)' FINDINGS.md` → none.
   not swept.
 - **`hooks/` runtime hooks (21 files: `gsd-prompt-guard.js`, `gsd-read-injection-scanner.js`,
   `gsd-workflow-guard.js`, ...) — mapped (subsystem 10) and given a reviewer doc, but produced no
-  concern card.** This is where the prior's #1107-class "duplicate-const PostToolUse hook shipped to
+  concern card.** This is where the prior's "duplicate-const PostToolUse hook shipped to
   all users" bug lived. The hooks are JS source (not `src/*.cts`), so they fell outside the
   `src/`-scoped sweep — a defensible *analysis* scope, but it means the audit's correctness/security
   conclusions do **not** cover the runtime-hook attack surface. (I did a shallow duplicate-const grep;
