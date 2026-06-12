@@ -37,7 +37,7 @@ const {
   applyWorktreeBaseRef,
   readBaseRefFromSettings,
 } = require('../gsd-core/bin/lib/worktree-base-ref.cjs');
-const { resolveRuntimeConfigIntent } = require('../gsd-core/bin/lib/runtime-config-adapter-registry.cjs');
+const { resolveInstallPlan } = require('../gsd-core/bin/lib/runtime-config-adapter-registry.cjs');
 // Canonical set of hook files shipped to users. Imported here so writeManifest()
 // records exactly the same set that build-hooks.js copies to hooks/dist/, making
 // the manifest and the installed hooks/ dir structurally identical. Avoids the
@@ -410,7 +410,7 @@ function selectRuntimesFromArgs(runtimeArgs) {
   if (runtimeArgs.includes('--copilot')) selected.push('copilot');
   if (runtimeArgs.includes('--antigravity')) selected.push('antigravity');
   if (runtimeArgs.includes('--cursor')) selected.push('cursor');
-  if (runtimeArgs.includes('--windsurf')) selected.push('windsurf');
+  if (runtimeArgs.includes('--windsurf') || runtimeArgs.includes('--devin-desktop')) selected.push('windsurf');
   if (runtimeArgs.includes('--augment')) selected.push('augment');
   if (runtimeArgs.includes('--trae')) selected.push('trae');
   if (runtimeArgs.includes('--qwen')) selected.push('qwen');
@@ -465,7 +465,7 @@ function getDirName(runtime) {
   if (runtime === 'gemini') return '.gemini';
   if (runtime === 'kilo') return '.kilo';
   if (runtime === 'codex') return '.codex';
-  if (runtime === 'antigravity') return '.agent';
+  if (runtime === 'antigravity') return '.agents';
   if (runtime === 'cursor') return '.cursor';
   if (runtime === 'windsurf') return '.windsurf';
   if (runtime === 'augment') return '.augment';
@@ -500,7 +500,7 @@ function getConfigDirFromHome(runtime, isGlobal) {
   if (runtime === 'kilo') return "'.config', 'kilo'";
   if (runtime === 'codex') return "'.codex'";
   if (runtime === 'antigravity') {
-    if (!isGlobal) return "'.agent'";
+    if (!isGlobal) return "'.agents'";
     const antigravityDir = resolveAntigravityGlobalDir();
     const rel = path.relative(os.homedir(), antigravityDir);
     const segments = rel.split(path.sep).filter(Boolean);
@@ -1208,6 +1208,52 @@ function injectEffortFrontmatter(content, effortValue) {
   const after = content.slice(closingStart);
   return `${before}effort: ${effortValue}${eol}${after}`;
 }
+
+/**
+ * #767 — Inject `disallowedTools: <value>` into the YAML frontmatter of a Claude .md agent.
+ * Mirrors injectEffortFrontmatter: idempotent (skips if disallowedTools: already present),
+ * inserts immediately before the closing `---`. Claude-only — never call for other runtimes,
+ * which break on unknown frontmatter keys.
+ */
+function injectDisallowedToolsFrontmatter(content, disallowedValue) {
+  // Detect the dominant EOL from the first line (the opening `---`).
+  // If the very first `---` is followed by \r\n, treat the whole file as CRLF.
+  const eol = /^---\r\n/.test(content) ? '\r\n' : '\n';
+
+  // Build a frontmatter-matching regex that tolerates an optional \r before
+  // each \n, so we handle both LF and CRLF files without needing to normalise
+  // the whole content.
+  const fmRe = /^---\r?\n([\s\S]*?)^---\r?$/m;
+  const match = fmRe.exec(content);
+  if (!match) return content; // no YAML frontmatter — leave unchanged
+
+  // Idempotency guard: don't insert a second disallowedTools: line.
+  const fmBody = match[1]; // content between the two `---` lines
+  if (/^disallowedTools:/m.test(fmBody)) return content;
+
+  // Locate the exact position of the closing `---` line so we can insert
+  // before it using a simple string splice.
+  const openLen = 3 + eol.length; // "---" + eol
+  const closingStart = match.index + openLen + fmBody.length;
+
+  const before = content.slice(0, closingStart);
+  const after = content.slice(closingStart);
+  return `${before}disallowedTools: ${disallowedValue}${eol}${after}`;
+}
+
+// #767 — Read-only verifier/auditor agents get a Claude-Code disallowedTools deny-list.
+// Group A (pure read-only) deny Write,Edit,MultiEdit. Group B report-writers Write one
+// output file so they deny only Edit,MultiEdit. gsd-nyquist-auditor is intentionally
+// excluded (it legitimately uses Write AND Edit to create/patch test files).
+const READONLY_AGENT_DISALLOWED_TOOLS = {
+  'gsd-plan-checker': 'Write, Edit, MultiEdit',
+  'gsd-integration-checker': 'Write, Edit, MultiEdit',
+  'gsd-ui-checker': 'Write, Edit, MultiEdit',
+  'gsd-verifier': 'Edit, MultiEdit',
+  'gsd-doc-verifier': 'Edit, MultiEdit',
+  'gsd-eval-auditor': 'Edit, MultiEdit',
+  'gsd-ui-auditor': 'Edit, MultiEdit',
+};
 
 /**
  * #2517 — Read a single GSD config file (defaults.json or per-project
@@ -2164,8 +2210,8 @@ function convertClaudeAgentToCopilotAgent(content, isGlobal = false) {
 /**
  * Apply Antigravity-specific content conversion — path replacement + command name conversion.
  * Path mappings depend on install mode:
- *   Global: ~/.claude/ → ~/.gemini/antigravity/, ./.claude/ → ./.agent/
- *   Local:  ~/.claude/ → .agent/, ./.claude/ → ./.agent/
+ *   Global: ~/.claude/ → ~/.gemini/antigravity/, ./.claude/ → ./.agents/
+ *   Local:  ~/.claude/ → .agents/, ./.claude/ → ./.agents/
  * Applied to ALL Antigravity content (skills, agents, engine files).
  * @param {string} content - Source content to convert
  * @param {boolean} [isGlobal=false] - Whether this is a global install
@@ -2179,14 +2225,14 @@ function convertClaudeToAntigravityContent(content, isGlobal = false) {
     c = c.replace(/\$HOME\/\.claude\b/g, '$HOME/.gemini/antigravity');
     c = c.replace(/~\/\.claude\b/g, '~/.gemini/antigravity');
   } else {
-    c = c.replace(/\$HOME\/\.claude\//g, '.agent/');
-    c = c.replace(/~\/\.claude\//g, '.agent/');
+    c = c.replace(/\$HOME\/\.claude\//g, '.agents/');
+    c = c.replace(/~\/\.claude\//g, '.agents/');
     // Bare form (no trailing slash) — must come after slash form to avoid double-replace
-    c = c.replace(/\$HOME\/\.claude\b/g, '.agent');
-    c = c.replace(/~\/\.claude\b/g, '.agent');
+    c = c.replace(/\$HOME\/\.claude\b/g, '.agents');
+    c = c.replace(/~\/\.claude\b/g, '.agents');
   }
-  c = c.replace(/\.\/\.claude\//g, './.agent/');
-  c = c.replace(/\.claude\//g, '.agent/');
+  c = c.replace(/\.\/\.claude\//g, './.agents/');
+  c = c.replace(/\.claude\//g, '.agents/');
   // Command name conversion (all gsd: references → gsd-)
   c = c.replace(/gsd:/g, 'gsd-');
   // Runtime-neutral agent name replacement (#766)
@@ -9337,7 +9383,7 @@ function install(isGlobal, runtime = 'claude', options = {}) {
   const isHermes = runtime === 'hermes';
   const isCodebuddy = runtime === 'codebuddy';
   const isCline = runtime === 'cline';
-  const configIntent = resolveRuntimeConfigIntent(runtime);
+  const plan = resolveInstallPlan(runtime);
   const dirName = getDirName(runtime);
   const src = path.join(__dirname, '..');
 
@@ -9391,6 +9437,10 @@ function install(isGlobal, runtime = 'claude', options = {}) {
   // Get the target directory based on runtime and install type.
   // Cline local installs write to the project root (like Claude Code) — .clinerules
   // lives at the root, not inside a .cline/ subdirectory.
+  // #791: antigravity local installs write to .agents/ (canonical). The legacy .agent/
+  // directory is recognized by RUNTIME_DIRS (update-context) and _LEGACY_SCAN_SUBDIR_NAMES
+  // but NOT auto-removed here; legacy .agent/ gsd artifacts are recognized but not
+  // auto-removed on reinstall (dual-read fallback per issue #791 spec).
   const targetDir = isGlobal
     ? getGlobalConfigDir(runtime, explicitConfigDir)
     : isCline
@@ -10181,6 +10231,8 @@ function install(isGlobal, runtime = 'claude', options = {}) {
           const _universalEffort = resolveInstallTimeEffort(_effortCfg, _agentName);
           const _renderedEffort = _getGsdEffortCatalog().renderEffortForRuntime('claude', _universalEffort).value;
           content = injectEffortFrontmatter(content, _renderedEffort);
+          const _disallowedTools = READONLY_AGENT_DISALLOWED_TOOLS[_agentName];
+          if (_disallowedTools) content = injectDisallowedToolsFrontmatter(content, _disallowedTools);
         }
         // #3677 — normalize retired `/gsd:<cmd>` colon refs in the agent body
         // to the canonical hyphen form `/gsd-<cmd>` for hyphen-`name:`
@@ -10478,7 +10530,7 @@ function install(isGlobal, runtime = 'claude', options = {}) {
     throw _earlyInstallErr;
   }
 
-  if (configIntent.installSurface === 'codex-toml' && !isMinimalMode(_effectiveInstallMode)) {
+  if (plan.installSurface === 'codex-toml' && !isMinimalMode(_effectiveInstallMode)) {
     // Capture pre-install snapshots before ANY GSD mutation
     // (#2760 fix 3). On post-write schema-validation failure OR any throw
     // during the mutation sequence (write failure, merge throw, etc.) we
@@ -10857,7 +10909,7 @@ function install(isGlobal, runtime = 'claude', options = {}) {
     return { settingsPath: null, settings: null, statuslineCommand: null, updateBannerCommand: null, runtime, configDir: targetDir };
   }
 
-  if (configIntent.installSurface === 'copilot-instructions') {
+  if (plan.installSurface === 'copilot-instructions') {
     // Generate copilot-instructions.md
     const templatePath = path.join(targetDir, 'gsd-core', 'templates', 'copilot-instructions.md');
     const instructionsPath = path.join(targetDir, 'copilot-instructions.md');
@@ -10887,7 +10939,7 @@ function install(isGlobal, runtime = 'claude', options = {}) {
     return { settingsPath: null, settings: null, statuslineCommand: null, updateBannerCommand: null, runtime, configDir: targetDir };
   }
 
-  if (configIntent.installSurface === 'cursor-hooks-json') {
+  if (plan.installSurface === 'cursor-hooks-json') {
     // #777: Cursor v2.4+ supports hooks.json. Register sessionStart + postToolUse.
     // Hook scripts are copied to <targetDir>/hooks/ and referenced by hooks.json.
     const cursorHookResult = writeCursorHooksJson(targetDir, src, {});
@@ -10902,13 +10954,13 @@ function install(isGlobal, runtime = 'claude', options = {}) {
     return { settingsPath: null, settings: null, statuslineCommand: null, updateBannerCommand: null, runtime, configDir: targetDir };
   }
 
-  if (configIntent.installSurface === 'profile-marker-only') {
+  if (plan.installSurface === 'profile-marker-only') {
     // Windsurf/Trae/Kimi use artifact-only surfaces — no config.toml or settings.json hooks needed.
     persistActiveProfileMarker();
     return { settingsPath: null, settings: null, statuslineCommand: null, updateBannerCommand: null, runtime, configDir: targetDir };
   }
 
-  if (configIntent.installSurface === 'cline-rules') {
+  if (plan.installSurface === 'cline-rules') {
     // Cline uses the `.clinerules/` directory form (issue #787): GSD rules live
     // at .clinerules/gsd.md and a PreToolUse lifecycle hook at
     // .clinerules/hooks/PreToolUse. Global installs also get ~/.agents/AGENTS.md.
@@ -10921,8 +10973,12 @@ function install(isGlobal, runtime = 'claude', options = {}) {
   }
 
   // Configure statusline and hooks in settings.json (or settings.local.json for local Claude installs).
-  // Gemini and Antigravity use AfterTool instead of PostToolUse for post-tool hooks
-  const postToolEvent = (runtime === 'gemini' || runtime === 'antigravity') ? 'AfterTool' : 'PostToolUse';
+  // ADR-857 phase 5f-2: drive the hook event dialect from the registry descriptor.
+  // runtimes with hookEvents='gemini' use AfterTool/BeforeTool; all others use PostToolUse/PreToolUse.
+  // Equivalence: hookEvents='gemini' iff runtime∈{gemini,antigravity} — identical to the old check.
+  // A missing registry or missing descriptor defaults to 'not gemini' → PostToolUse (safe).
+  const _hookEventsDialect = plan.hookEvents;
+  const postToolEvent = _hookEventsDialect === 'gemini' ? 'AfterTool' : 'PostToolUse';
   // #338: local Claude installs write to settings.local.json (Claude Code's per-user/gitignored slot)
   // so engineer-specific absolute paths (Node binary, home dir) never land in the repo-shared
   // settings.json. Global installs and all other runtimes continue to use settings.json.
@@ -11104,6 +11160,9 @@ function install(isGlobal, runtime = 'claude', options = {}) {
     isGlobal,
     targetDir,
     postToolEvent,
+    hookEvents: _hookEventsDialect,
+    extendedHookEvents: plan.extendedHookEvents,
+    hooksSurface: plan.hooksSurface,
     updateCheckCommand,
     contextMonitorCommand,
     promptGuardCommand,
@@ -11228,9 +11287,9 @@ function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallS
   const isWindsurf = runtime === 'windsurf';
   const isTrae = runtime === 'trae';
   const isCline = runtime === 'cline';
-  const configIntent = resolveRuntimeConfigIntent(runtime);
+  const plan = resolveInstallPlan(runtime);
 
-  if (shouldInstallStatusline && configIntent.writesSharedSettings && !isOpencode) {
+  if (shouldInstallStatusline && plan.writesSharedSettings && !isOpencode) {
     if (!isGlobal && !forceStatusline) {
       // Local installs skip statusLine by default: repo settings.json takes precedence over
       // profile-level settings.json in Claude Code, so writing here would silently clobber
@@ -11256,7 +11315,7 @@ function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallS
   // settings.json hooks block — opencode/kilo/codex/cursor/windsurf/trae/
   // cline either lack the surface or use a different config schema.
   const { shouldInstallBanner, bannerCommand } = bannerOpts;
-  if (shouldInstallBanner && settings && configIntent.writesSharedSettings && !isOpencode) {
+  if (shouldInstallBanner && settings && plan.writesSharedSettings && !isOpencode) {
     if (!bannerCommand) {
       console.warn(`  ${yellow}⚠${reset}  Skipped update banner registration — Node executable path unavailable. See #2979 / #3002.`);
     } else {
@@ -11296,17 +11355,17 @@ function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallS
   // {type: 'command', command: null} items that the runtime hook schema
   // rejects at parse time. validateHookFields filters those out so the file
   // we write is always schema-valid.
-  if (settingsPath && settings && configIntent.writesSharedSettings) {
+  if (settingsPath && settings && plan.writesSharedSettings) {
     writeSettings(settingsPath, validateHookFields(settings));
   }
 
   // Configure OpenCode permissions
-  if (configIntent.finishPermissionWriter === 'opencode' && !process.env.GSD_TEST_MODE) {
+  if (plan.finishPermissionWriter === 'opencode' && !process.env.GSD_TEST_MODE) {
     configureOpencodePermissions(isGlobal, configDir);
   }
 
   // Configure Kilo permissions
-  if (configIntent.finishPermissionWriter === 'kilo') {
+  if (plan.finishPermissionWriter === 'kilo') {
     configureKiloPermissions(isGlobal, configDir);
   }
 
@@ -11845,7 +11904,8 @@ const _LEGACY_SCAN_SUBDIR_NAMES = [
   '.codex',
   '.copilot',
   '.github',    // copilot local form
-  '.agent',     // antigravity local form
+  '.agents',    // antigravity local form (canonical, #791)
+  '.agent',     // antigravity local form (legacy, backward-compat)
   '.cursor',
   '.windsurf',
   '.codeium/windsurf',
