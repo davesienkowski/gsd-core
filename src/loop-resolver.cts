@@ -5,7 +5,9 @@
  * filters the materialized Capability Registry by config activation and returns
  * the active hooks as a JSON envelope with a rendered-markdown field.
  *
- * REGISTRY-ONLY: no workflow calls this yet (phase-6 cutover is out of scope).
+ * Consumed live by the landed phase-6 loop-hook cutovers: plan-phase.md / autonomous.md
+ * at plan:pre (ui-phase) and autonomous.md at verify:post (ui-review). Further per-feature
+ * cutovers are ongoing.
  *
  * Command surface: gsd-tools loop render-hooks <point>
  *
@@ -36,6 +38,10 @@ const { output: coreOutput, error: coreError } = core;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import configLoaderModule = require('./config-loader.cjs');
 const { loadConfig } = configLoaderModule;
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import capabilityStateModule = require('./capability-state.cjs');
+const { resolveCapabilityRuntimeState } = capabilityStateModule;
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import planningWorkspaceMod = require('./planning-workspace.cjs');
@@ -221,6 +227,7 @@ function _resolveActivationValue(
 
 interface HookRef {
   skill?: string;
+  agent?: string;
   [key: string]: unknown;
 }
 
@@ -229,6 +236,7 @@ interface RawHook {
   point?: unknown;
   ref?: unknown;
   into?: unknown;
+  fragment?: unknown;
   produces?: unknown;
   consumes?: unknown;
   when?: unknown;
@@ -244,12 +252,15 @@ interface ActiveHook {
   kind: HookKind;
   ref?: HookRef;
   into?: string;
+  fragment?: { inline?: string; path?: string };
   when?: string;
   produces?: string[];
   consumes?: string[];
   blocking?: boolean;
   check?: unknown;
   onError?: string;
+  /** Resolved capability-owned config values declared in the contribution's configValues map. */
+  configValues?: Record<string, unknown>;
 }
 
 interface ResolveLoopHooksInput {
@@ -258,6 +269,8 @@ interface ResolveLoopHooksInput {
   config: Record<string, unknown>;
   /** Optional cwd — enables raw config.json fallback reads (FIX 1 precedence level 2). */
   cwd?: string;
+  /** Optional capability-state map; when present, disabled capabilities do not render hooks. */
+  capabilityStatesById?: Map<string, { enabled?: boolean }> | Record<string, { enabled?: boolean }>;
 }
 
 interface ResolveLoopHooksResult {
@@ -281,7 +294,7 @@ interface ResolveLoopHooksResult {
  * resolved against `config`; active iff truthy. Inactive hooks are filtered out.
  */
 function resolveLoopHooks(input: ResolveLoopHooksInput): ResolveLoopHooksResult {
-  const { point, registry, config, cwd } = input;
+  const { point, registry, config, cwd, capabilityStatesById } = input;
 
   // Validate point
   const canonicalPoints = _getCanonicalPoints(registry);
@@ -317,10 +330,69 @@ function resolveLoopHooks(input: ResolveLoopHooksInput): ResolveLoopHooksResult 
     return _resolveActivationValue(when, config, cwd, registry);
   }
 
+  function isCapabilityEnabled(capId: string): boolean {
+    if (!capabilityStatesById) return true;
+    const state = capabilityStatesById instanceof Map
+      ? capabilityStatesById.get(capId)
+      : capabilityStatesById[capId];
+    if (!state) return false;
+    return state.enabled !== false;
+  }
+
   // Helper: safe string array
   function toStringArray(v: unknown): string[] {
     if (!Array.isArray(v)) return [];
     return v.filter((x): x is string => typeof x === 'string');
+  }
+
+  function toFragment(v: unknown): { inline?: string; path?: string } | undefined {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+    const raw = v as Record<string, unknown>;
+    const fragment: { inline?: string; path?: string } = {};
+    if (typeof raw.inline === 'string') fragment.inline = raw.inline;
+    if (typeof raw.path === 'string') fragment.path = raw.path;
+    return Object.keys(fragment).length > 0 ? fragment : undefined;
+  }
+
+  /**
+   * Resolve declared configValues for a contribution hook.
+   * The hook may carry `configValues: { alias: "dotted.key", ... }`.
+   * Each key is resolved using the same four-level precedence as activation resolution,
+   * but returning the raw value (not coerced to boolean) so numeric/string config values
+   * are preserved (e.g. security_asvs_level: 2, security_block_on: "medium").
+   */
+  function resolveConfigValues(hook: RawHook): Record<string, unknown> | undefined {
+    const raw = (hook as Record<string, unknown>)['configValues'];
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+    const rawMap = raw as Record<string, unknown>;
+    const resolved: Record<string, unknown> = {};
+    for (const [alias, dotKey] of Object.entries(rawMap)) {
+      // Prototype-pollution guard (inline literal, CodeQL barrier)
+      if (alias === '__proto__' || alias === 'constructor' || alias === 'prototype') continue;
+      if (typeof dotKey !== 'string') continue;
+      // Level 1: loadConfig result
+      const fromConfig = _getNestedConfigValue(config, dotKey);
+      if (fromConfig.found) { resolved[alias] = fromConfig.value; continue; }
+      // Level 2 + 3: raw config.json files
+      if (cwd) {
+        const wsConfigPath = path.join(planningDir(cwd), 'config.json');
+        const rootConfigPath = path.join(planningRoot(cwd), 'config.json');
+        const fromWs = _readRawConfigKey(wsConfigPath, dotKey);
+        if (fromWs.found) { resolved[alias] = fromWs.value; continue; }
+        if (wsConfigPath !== rootConfigPath) {
+          const fromRoot = _readRawConfigKey(rootConfigPath, dotKey);
+          if (fromRoot.found) { resolved[alias] = fromRoot.value; continue; }
+        }
+      }
+      // Level 4: registry configSchema default
+      const schemaEntry = (registry['configSchema'] as Record<string, unknown> | undefined)?.[dotKey];
+      if (schemaEntry && typeof schemaEntry === 'object' && schemaEntry !== null) {
+        const def = (schemaEntry as Record<string, unknown>)['default'];
+        if (def !== undefined) { resolved[alias] = def; continue; }
+      }
+      // Level 5: absent → undefined (omit from resolved map)
+    }
+    return Object.keys(resolved).length > 0 ? resolved : undefined;
   }
 
   // Process steps
@@ -328,17 +400,20 @@ function resolveLoopHooks(input: ResolveLoopHooksInput): ResolveLoopHooksResult 
   const steps: RawHook[] = Array.isArray(stepsRaw) ? (stepsRaw as RawHook[]) : [];
   for (const hook of steps) {
     if (!hook || typeof hook !== 'object') continue;
-    if (!isActive(hook)) continue;
     const capId = typeof hook['capId'] === 'string' ? hook['capId'] : '';
+    if (!isCapabilityEnabled(capId)) continue;
+    if (!isActive(hook)) continue;
     const ref = (typeof hook['ref'] === 'object' && hook['ref'] !== null)
       ? (hook['ref'] as HookRef)
       : undefined;
     const when = typeof hook['when'] === 'string' ? hook['when'] : undefined;
+    const fragment = toFragment(hook['fragment']);
     const produces = toStringArray(hook['produces']);
     const consumes = toStringArray(hook['consumes']);
     const onError = typeof hook['onError'] === 'string' ? hook['onError'] : undefined;
     const active: ActiveHook = { capId, kind: 'step' };
     if (ref !== undefined) active.ref = ref;
+    if (fragment !== undefined) active.fragment = fragment;
     if (when !== undefined) active.when = when;
     if (produces.length > 0) active.produces = produces;
     if (consumes.length > 0) active.consumes = consumes;
@@ -351,19 +426,24 @@ function resolveLoopHooks(input: ResolveLoopHooksInput): ResolveLoopHooksResult 
   const contributions: RawHook[] = Array.isArray(contributionsRaw) ? (contributionsRaw as RawHook[]) : [];
   for (const hook of contributions) {
     if (!hook || typeof hook !== 'object') continue;
-    if (!isActive(hook)) continue;
     const capId = typeof hook['capId'] === 'string' ? hook['capId'] : '';
+    if (!isCapabilityEnabled(capId)) continue;
+    if (!isActive(hook)) continue;
     const into = typeof hook['into'] === 'string' ? hook['into'] : undefined;
+    const fragment = toFragment(hook['fragment']);
     const when = typeof hook['when'] === 'string' ? hook['when'] : undefined;
     const produces = toStringArray(hook['produces']);
     const consumes = toStringArray(hook['consumes']);
     const onError = typeof hook['onError'] === 'string' ? hook['onError'] : undefined;
+    const configValuesResolved = resolveConfigValues(hook);
     const active: ActiveHook = { capId, kind: 'contribution' };
     if (into !== undefined) active.into = into;
+    if (fragment !== undefined) active.fragment = fragment;
     if (when !== undefined) active.when = when;
     if (produces.length > 0) active.produces = produces;
     if (consumes.length > 0) active.consumes = consumes;
     if (onError !== undefined) active.onError = onError;
+    if (configValuesResolved !== undefined) active.configValues = configValuesResolved;
     activeHooks.push(active);
   }
 
@@ -372,8 +452,9 @@ function resolveLoopHooks(input: ResolveLoopHooksInput): ResolveLoopHooksResult 
   const gates: RawHook[] = Array.isArray(gatesRaw) ? (gatesRaw as RawHook[]) : [];
   for (const hook of gates) {
     if (!hook || typeof hook !== 'object') continue;
-    if (!isActive(hook)) continue;
     const capId = typeof hook['capId'] === 'string' ? hook['capId'] : '';
+    if (!isCapabilityEnabled(capId)) continue;
+    if (!isActive(hook)) continue;
     const when = typeof hook['when'] === 'string' ? hook['when'] : undefined;
     const check = hook['check'] !== undefined ? hook['check'] : undefined;
     const blocking = typeof hook['blocking'] === 'boolean' ? hook['blocking'] : undefined;
@@ -414,7 +495,9 @@ function renderLoopHooks(resolved: ResolveLoopHooksResult): string {
       stepOrdinal += 1;
       const refStr = hook.ref?.skill
         ? `skill:${hook.ref.skill}`
-        : JSON.stringify(hook.ref ?? {});
+        : hook.ref?.agent
+          ? `agent:${hook.ref.agent}`
+          : JSON.stringify(hook.ref ?? {});
       lines.push(`### Step ${stepOrdinal}: ${refStr} (${hook.capId})`);
       if (hook.produces && hook.produces.length > 0) {
         lines.push(`- produces: ${hook.produces.join(', ')}`);
@@ -428,9 +511,21 @@ function renderLoopHooks(resolved: ResolveLoopHooksResult): string {
       if (hook.onError) {
         lines.push(`- onError: ${hook.onError}`);
       }
+      if (hook.fragment?.inline) {
+        lines.push('');
+        lines.push(hook.fragment.inline);
+      } else if (hook.fragment?.path) {
+        lines.push('');
+        lines.push(`_Step fragment path is declared but not rendered by loop-resolver: ${hook.fragment.path}_`);
+      }
       lines.push('');
     } else if (hook.kind === 'contribution') {
-      lines.push(`<contribution from="${hook.capId}" into="${hook.into ?? '(unset)'}"/>`);
+      lines.push(`<contribution from="${hook.capId}" into="${hook.into ?? '(unset)'}">`);
+      if (hook.fragment?.inline) {
+        lines.push(hook.fragment.inline);
+      } else if (hook.fragment?.path) {
+        lines.push(`_Contribution fragment path is declared but not rendered by loop-resolver: ${hook.fragment.path}_`);
+      }
       if (hook.produces && hook.produces.length > 0) {
         lines.push(`- produces: ${hook.produces.join(', ')}`);
       }
@@ -440,6 +535,10 @@ function renderLoopHooks(resolved: ResolveLoopHooksResult): string {
       if (hook.when) {
         lines.push(`- when: \`${hook.when}\``);
       }
+      if (hook.onError) {
+        lines.push(`- onError: ${hook.onError}`);
+      }
+      lines.push('</contribution>');
       lines.push('');
     } else if (hook.kind === 'gate') {
       let checkStr = '(none)';
@@ -481,41 +580,78 @@ function renderLoopHooks(resolved: ResolveLoopHooksResult): string {
  * merged-object-from-untrusted-keys security concern and correctly handles
  * pre-cutover keys like `workflow.ui_phase` that live in config.json but are not
  * yet exposed through loadConfig's whitelist.
+ *
+ * --active-cap <capId>: when present, resolves hooks for <point> exactly as the
+ * normal path does, then prints exactly `true` (if any resolved activeHook has
+ * capId === <capId>) or `false` followed by a single newline, and exits 0.
+ * No JSON envelope is emitted — output is clean for shell $(…) capture.
+ * Missing <capId> value → coreError + non-zero exit.
+ * Unknown/inactive capId → `false` (not an error).
  */
 function cmdLoopRenderHooks(
   cwd: string,
   point: string,
   raw: boolean,
-  _options: Record<string, unknown> = {},
+  options: Record<string, unknown> = {},
 ): void {
   if (!point) {
     coreError('loop render-hooks requires a <point> argument. Valid points: ' + CANONICAL_POINTS.join(', '));
     return;
   }
 
-  // Load registry at call time (generated file, not at module load time)
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const registry = require('./capability-registry.cjs') as Record<string, unknown>;
-  // FIX 1: Pass loadConfig result as `config` (level 1 of precedence);
-  // raw config.json reads (levels 2+3) happen per-hook inside _resolveActivationValue
-  // via the `cwd` argument passed to resolveLoopHooks.
-  const config = loadConfig(cwd);
+  // --active-cap <capId> mode: emit 'true' or 'false' only (scanner-safe, no JSON envelope)
+  const activeCapId = typeof options['activeCap'] === 'string' ? options['activeCap'] : undefined;
+  if (activeCapId !== undefined && activeCapId === '') {
+    coreError('--active-cap requires a <capId> value (e.g. --active-cap tdd)');
+    return;
+  }
+
+  const runtimeConfigDir = typeof options['configDir'] === 'string'
+    ? options['configDir']
+    : undefined;
+  const state = resolveCapabilityRuntimeState(cwd, runtimeConfigDir) as {
+    warnings?: string[];
+    registry: Record<string, unknown>;
+    config: Record<string, unknown>;
+    capabilities: Array<{ id: string; enabled?: boolean }>;
+  };
+  const registry = state.registry;
+  const config = state.config || loadConfig(cwd);
+  const capabilityStatesById = new Map<string, { enabled?: boolean }>();
+  for (const cap of state.capabilities || []) {
+    capabilityStatesById.set(cap.id, cap);
+  }
 
   let resolved: ResolveLoopHooksResult;
   try {
-    resolved = resolveLoopHooks({ point, registry, config, cwd });
+    resolved = resolveLoopHooks({ point, registry, config, cwd, capabilityStatesById });
   } catch (err: unknown) {
     const msg = (err instanceof Error) ? err.message : String(err);
     coreError(msg);
     return;
   }
 
+  // --active-cap mode: print exactly 'true' or 'false' with no envelope
+  if (activeCapId !== undefined) {
+    const isActive = resolved.activeHooks.some((h) => h.capId === activeCapId);
+    process.stdout.write(isActive ? 'true\n' : 'false\n');
+    return;
+  }
+
   const rendered = renderLoopHooks(resolved);
-  const envelope = {
+  const envelope: {
+    point: string;
+    activeHooks: ActiveHook[];
+    rendered: string;
+    warnings?: string[];
+  } = {
     point: resolved.point,
     activeHooks: resolved.activeHooks,
     rendered,
   };
+  if (state.warnings && state.warnings.length > 0) {
+    envelope.warnings = state.warnings;
+  }
 
   coreOutput(envelope, raw);
 }

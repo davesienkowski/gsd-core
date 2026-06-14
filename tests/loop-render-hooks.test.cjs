@@ -54,6 +54,8 @@ let tmpProjectDir;
 let tmpEmptyProjectDir;
 // A project where ui_phase is explicitly false in root config
 let tmpFalseConfigProjectDir;
+// Runtime config dir whose surface disables the UI capability
+let tmpUiDisabledConfigDir;
 
 before(() => {
   tmpProjectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'loop-resolver-test-'));
@@ -79,12 +81,25 @@ before(() => {
     JSON.stringify({ workflow: { ui_phase: false, ui_review: false, ui_safety_gate: false } }),
     'utf8',
   );
+
+  tmpUiDisabledConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'loop-resolver-ui-disabled-'));
+  fs.writeFileSync(
+    path.join(tmpUiDisabledConfigDir, '.gsd-surface.json'),
+    JSON.stringify({
+      baseProfile: 'full',
+      disabledClusters: ['ui'],
+      explicitAdds: [],
+      explicitRemoves: [],
+    }, null, 2),
+    'utf8',
+  );
 });
 
 after(() => {
   if (tmpProjectDir) cleanup(tmpProjectDir);
   if (tmpEmptyProjectDir) cleanup(tmpEmptyProjectDir);
   if (tmpFalseConfigProjectDir) cleanup(tmpFalseConfigProjectDir);
+  if (tmpUiDisabledConfigDir) cleanup(tmpUiDisabledConfigDir);
 });
 
 // ─── 1. Canonical-point validation ───────────────────────────────────────────
@@ -643,6 +658,27 @@ describe('renderLoopHooks', () => {
     assert.match(rendered, /skip/);
   });
 
+  test('step hook renders agent ref and inline prompt fragment', () => {
+    const registry = makeRegistry({
+      point: 'plan:pre',
+      steps: [{
+        capId: 'research',
+        point: 'plan:pre',
+        ref: { agent: 'gsd-phase-researcher' },
+        fragment: { inline: 'Research the phase before planning.' },
+        produces: ['RESEARCH.md'],
+        consumes: ['CONTEXT.md'],
+        onError: 'skip',
+      }],
+    });
+    const resolved = resolveLoopHooks({ point: 'plan:pre', registry, config: {} });
+    assert.deepEqual(resolved.activeHooks[0].fragment, { inline: 'Research the phase before planning.' });
+
+    const rendered = renderLoopHooks(resolved);
+    assert.match(rendered, /agent:gsd-phase-researcher/);
+    assert.match(rendered, /Research the phase before planning\./);
+  });
+
   test('contribution hook renders into role', () => {
     const resolved = {
       point: 'plan:pre',
@@ -650,12 +686,42 @@ describe('renderLoopHooks', () => {
         capId: 'contrib-cap',
         kind: 'contribution',
         into: 'planner',
+        fragment: { inline: 'Apply the project-specific planning guardrails.' },
       }],
     };
     const rendered = renderLoopHooks(resolved);
     assert.match(rendered, /contribution/);
     assert.match(rendered, /contrib-cap/);
     assert.match(rendered, /planner/);
+    assert.match(rendered, /Apply the project-specific planning guardrails\./);
+    assert.match(rendered, /<contribution from="contrib-cap" into="planner">/);
+    assert.match(rendered, /<\/contribution>/);
+    assert.doesNotMatch(rendered, /<contribution[^>]+\/>/);
+  });
+
+  test('resolveLoopHooks preserves contribution fragment data', () => {
+    const registry = makeRegistry({
+      point: 'plan:pre',
+      contributions: [{
+        capId: 'contrib-cap',
+        point: 'plan:pre',
+        into: 'planner',
+        fragment: { inline: 'Use artifact-backed evidence.' },
+        produces: ['PLAN-NOTES.md'],
+        consumes: ['CONTEXT.md'],
+        when: 'workflow.contrib',
+        onError: 'halt',
+      }],
+      configSchema: {
+        'workflow.contrib': { type: 'boolean', default: true, description: 'Enable test contribution.' },
+      },
+    });
+    const resolved = resolveLoopHooks({ point: 'plan:pre', registry, config: {} });
+    assert.strictEqual(resolved.activeHooks.length, 1);
+    assert.deepEqual(resolved.activeHooks[0].fragment, { inline: 'Use artifact-backed evidence.' });
+    assert.deepEqual(resolved.activeHooks[0].produces, ['PLAN-NOTES.md']);
+    assert.deepEqual(resolved.activeHooks[0].consumes, ['CONTEXT.md']);
+    assert.strictEqual(resolved.activeHooks[0].onError, 'halt');
   });
 
   test('gate hook renders check, blocking, onError', () => {
@@ -748,6 +814,31 @@ describe('cmdLoopRenderHooks end-to-end (via gsd-tools)', () => {
     assert.match(envelope.rendered, /ui-phase/);
   });
 
+  test('loop render-hooks plan:pre with ui capability disabled in surface → ui hooks absent', () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        GSD_TOOLS,
+        'loop',
+        'render-hooks',
+        'plan:pre',
+        '--cwd',
+        tmpEmptyProjectDir,
+        '--config-dir',
+        tmpUiDisabledConfigDir,
+      ],
+      { cwd: ROOT, encoding: 'utf8' },
+    );
+    assert.strictEqual(result.status, 0, 'Expected exit 0. stderr: ' + (result.stderr || ''));
+    const envelope = JSON.parse(result.stdout.trim());
+    const uiHooks = envelope.activeHooks.filter(h => h.capId === 'ui');
+    assert.deepStrictEqual(
+      uiHooks,
+      [],
+      'UI hooks must be absent when the UI capability is disabled at the runtime surface',
+    );
+  });
+
   // FIX 4: explicit false in config.json overrides schema default
   test('loop render-hooks plan:pre with ui_phase=false in config.json → ui-phase step absent', () => {
     const result = spawnSync(
@@ -773,5 +864,102 @@ describe('cmdLoopRenderHooks end-to-end (via gsd-tools)', () => {
     );
     assert.notStrictEqual(result.status, 0, 'Expected non-zero exit for invalid point');
     assert.match(result.stderr, /plan:mid|Invalid loop point/);
+  });
+});
+
+// ─── 10. --active-cap flag (scanner-safe boolean derivation) ──────────────────
+
+describe('--active-cap flag (loop render-hooks)', () => {
+  // Temp project with tdd_mode=true in config
+  let tddOnDir;
+  // Temp project with tdd_mode=false in config
+  let tddOffDir;
+
+  before(() => {
+    tddOnDir = fs.mkdtempSync(path.join(os.tmpdir(), 'loop-active-cap-tdd-on-'));
+    const planOn = path.join(tddOnDir, '.planning');
+    fs.mkdirSync(planOn, { recursive: true });
+    fs.writeFileSync(
+      path.join(planOn, 'config.json'),
+      JSON.stringify({ workflow: { tdd_mode: true } }),
+      'utf8',
+    );
+
+    tddOffDir = fs.mkdtempSync(path.join(os.tmpdir(), 'loop-active-cap-tdd-off-'));
+    const planOff = path.join(tddOffDir, '.planning');
+    fs.mkdirSync(planOff, { recursive: true });
+    fs.writeFileSync(
+      path.join(planOff, 'config.json'),
+      JSON.stringify({ workflow: { tdd_mode: false } }),
+      'utf8',
+    );
+  });
+
+  after(() => {
+    if (tddOnDir) cleanup(tddOnDir);
+    if (tddOffDir) cleanup(tddOffDir);
+  });
+
+  test('--active-cap tdd with tdd_mode=true → stdout trimmed === "true", exit 0', () => {
+    const result = spawnSync(
+      process.execPath,
+      [GSD_TOOLS, 'loop', 'render-hooks', 'execute:post', '--active-cap', 'tdd', '--cwd', tddOnDir],
+      { cwd: ROOT, encoding: 'utf8' },
+    );
+    assert.strictEqual(result.status, 0, 'Expected exit 0. stderr: ' + (result.stderr || ''));
+    assert.strictEqual(result.stdout.trim(), 'true', 'Expected stdout "true" when tdd_mode=true');
+  });
+
+  test('--active-cap tdd with tdd_mode=false → stdout trimmed === "false", exit 0', () => {
+    const result = spawnSync(
+      process.execPath,
+      [GSD_TOOLS, 'loop', 'render-hooks', 'execute:post', '--active-cap', 'tdd', '--cwd', tddOffDir],
+      { cwd: ROOT, encoding: 'utf8' },
+    );
+    assert.strictEqual(result.status, 0, 'Expected exit 0. stderr: ' + (result.stderr || ''));
+    assert.strictEqual(result.stdout.trim(), 'false', 'Expected stdout "false" when tdd_mode=false');
+  });
+
+  test('--active-cap <nonexistent-cap> → stdout trimmed === "false", exit 0', () => {
+    const result = spawnSync(
+      process.execPath,
+      [GSD_TOOLS, 'loop', 'render-hooks', 'execute:post', '--active-cap', 'no-such-capability-xyz', '--cwd', tddOffDir],
+      { cwd: ROOT, encoding: 'utf8' },
+    );
+    assert.strictEqual(result.status, 0, 'Expected exit 0 for unknown capId. stderr: ' + (result.stderr || ''));
+    assert.strictEqual(result.stdout.trim(), 'false', 'Expected stdout "false" for unknown capId');
+  });
+
+  test('--active-cap with no value → non-zero exit and error message', () => {
+    const result = spawnSync(
+      process.execPath,
+      [GSD_TOOLS, 'loop', 'render-hooks', 'execute:post', '--active-cap', '--cwd', tddOffDir],
+      { cwd: ROOT, encoding: 'utf8' },
+    );
+    assert.notStrictEqual(result.status, 0, 'Expected non-zero exit when --active-cap has no value');
+    assert.match(result.stderr, /active-cap/i, 'Expected error message referencing --active-cap');
+  });
+
+  test('--active-cap output is exactly "true" or "false" (no JSON envelope, clean for shell capture)', () => {
+    // The entire stdout must be just "true" or "false" + newline — no envelope object
+    const result = spawnSync(
+      process.execPath,
+      [GSD_TOOLS, 'loop', 'render-hooks', 'execute:post', '--active-cap', 'tdd', '--cwd', tddOnDir],
+      { cwd: ROOT, encoding: 'utf8' },
+    );
+    assert.strictEqual(result.status, 0, 'Expected exit 0. stderr: ' + (result.stderr || ''));
+    // Must be exactly "true" or "false" — not a JSON object/envelope
+    const trimmed = result.stdout.trim();
+    assert.ok(
+      trimmed === 'true' || trimmed === 'false',
+      `stdout must be "true" or "false", got: ${JSON.stringify(result.stdout)}`,
+    );
+    // Must not be a JSON object (no envelope with point/activeHooks/rendered keys)
+    let parsed;
+    try { parsed = JSON.parse(trimmed); } catch { parsed = null; }
+    assert.ok(
+      typeof parsed !== 'object' || parsed === null,
+      'stdout must not be a JSON object/envelope when --active-cap is used',
+    );
   });
 });

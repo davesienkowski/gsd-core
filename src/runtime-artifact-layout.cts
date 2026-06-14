@@ -4,9 +4,9 @@
  * Runtime artifact layout module — resolves the artifact directory shapes
  * (commands, agents, skills) for each supported runtime.
  *
- * grok is intentionally absent: it is in runtime-homes.cjs but not wired
- * here. The TypeError on unknown runtime is the loud-fail signal that a
- * runtime was added to the homes list without a layout entry.
+ * grok is intentionally absent: it is in runtime-homes.cjs but has no runtime
+ * capability descriptor. The TypeError on unknown runtime is the loud-fail
+ * signal that a runtime was added without an artifact layout descriptor.
  *
  * ADR-457 build-at-publish: the hand-written bin/lib/runtime-artifact-layout.cjs
  * collapsed to a TypeScript source of truth. Behaviour is preserved byte-for-behaviour
@@ -24,6 +24,11 @@ const {
   stageSkillsForRuntimeAsSkills,
   stageCommandsForRuntimeFlat,
 } = installProfiles;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import runtimeArtifactConversion = require('./runtime-artifact-conversion.cjs');
+const conversionExports = runtimeArtifactConversion as Record<string, unknown> & {
+  readGsdCommandNames?: () => string[];
+};
 
 // In .cts (CommonJS output) files, `require` is available as a global.
 const _require: NodeRequire = require;
@@ -33,7 +38,6 @@ const _require: NodeRequire = require;
 // ---------------------------------------------------------------------------
 
 interface InstallExports {
-  readGsdCommandNames: () => string[];
   computePathPrefix: (opts: { isGlobal: boolean; isOpencode: boolean; isWindowsHost: boolean; resolvedTarget: string; homeDir: string }) => string;
   applyRuntimeContentRewritesInPlace: (stagedDir: string, runtime: string, pathPrefix: string) => void;
   [converterName: string]: unknown;
@@ -167,16 +171,6 @@ function findAgentsSourceRoot(runtimeConfigDir?: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Allowlisted runtimes
-// ---------------------------------------------------------------------------
-
-const ALLOWED_RUNTIMES = new Set([
-  'claude', 'cursor', 'gemini', 'codex', 'copilot', 'antigravity',
-  'windsurf', 'augment', 'trae', 'qwen', 'hermes', 'codebuddy',
-  'cline', 'kimi', 'opencode', 'kilo',
-]);
-
-// ---------------------------------------------------------------------------
 // Layout table builders
 // ---------------------------------------------------------------------------
 
@@ -204,8 +198,7 @@ function kimiAgentsKind(destSubpath: string, prefix: string, configDir: string):
     destSubpath,
     prefix,
     stage: (resolved) => {
-      const installExports = getInstallExports();
-      const buildKimiAgentArtifacts = installExports['buildKimiAgentArtifacts'] as (opts: {
+      const buildKimiAgentArtifacts = conversionExports['buildKimiAgentArtifacts'] as (opts: {
         rootAgent?: string;
         subagents?: Array<{ path: string; content: string }>;
       }) => {
@@ -247,7 +240,7 @@ function kimiAgentsKind(destSubpath: string, prefix: string, configDir: string):
  *
  * @param destSubpath
  * @param prefix
- * @param converterName  name of converter function in bin/install.js exports
+ * @param converterName  name of converter function in Runtime Artifact Conversion exports
  * @param runtime        canonical runtime ID (gates Hermes/Qwen branding in converter)
  * @param configDir      runtime config dir (for .gsd-source marker resolution)
  * @param nested         if true, nest concrete skills under their ns-* routers (#69)
@@ -270,15 +263,16 @@ function skillsKind(
     destSubpath,
     prefix,
     stage: (resolved) => {
-      const installExports = getInstallExports();
-      const realConverter = installExports[converterName] as (content: string, skillName: string, runtime: string, cmdNames: string[], isGlobal: boolean) => string;
+      const realConverter = conversionExports[converterName] as (content: string, skillName: string, runtime: string, cmdNames: string[], isGlobal: boolean) => string;
       // Compute cmdNames once per stage call for performance (#3583).
       // Extra trailing args are ignored by converters that don't need them. The
       // isGlobal flag is the 5th positional (NOT the 3rd): the 3rd positional is
       // `runtime` for the claude/kimi/cline converters, so the scope-aware
       // converters (antigravity, copilot) read isGlobal from position 5 to avoid
       // colliding with `runtime` and always taking the global branch.
-      const cmdNames = installExports.readGsdCommandNames();
+      const cmdNames = conversionExports.readGsdCommandNames
+        ? conversionExports.readGsdCommandNames()
+        : [];
       const isGlobal = scope === 'global';
       const wrappedConverter = (content: string, skillName: string): string =>
         realConverter(content, skillName, runtime, cmdNames, isGlobal);
@@ -292,7 +286,7 @@ function skillsKind(
  * commands directory with per-file conversion (e.g. Cursor 1.6 slash commands).
  *
  * Unlike `commandsKind` (which passes raw source files through), this kind
- * applies `converterName` from bin/install.js exports to each file during
+ * applies `converterName` from Runtime Artifact Conversion exports to each file during
  * staging, writing flat `${prefix}${stem}.md` files to the staged directory.
  *
  * The staged files are then written by `_copyStaged` (commands branch) which
@@ -300,7 +294,7 @@ function skillsKind(
  *
  * @param destSubpath   destination subpath within configDir (e.g. 'commands')
  * @param prefix        filename prefix, e.g. 'gsd-'
- * @param converterName name of converter function in bin/install.js exports
+ * @param converterName name of converter function in Runtime Artifact Conversion exports
  * @param configDir     runtime config dir (for .gsd-source marker resolution)
  */
 function convertedCommandsKind(
@@ -314,8 +308,7 @@ function convertedCommandsKind(
     destSubpath,
     prefix,
     stage: (resolved) => {
-      const installExports = getInstallExports();
-      const converter = installExports[converterName] as (content: string, commandName: string) => string;
+      const converter = conversionExports[converterName] as (content: string, commandName: string) => string;
       return stageCommandsForRuntimeFlat(findInstallSourceRoot(configDir), resolved, converter, prefix);
     },
   };
@@ -382,7 +375,11 @@ interface ArtifactLayoutDescriptor {
 }
 
 /** Lazy registry accessor — mirrors pattern from 5b/5c (runtime-homes.cts). */
-function getRegistry(): { runtimes: Record<string, { runtime?: { artifactLayout?: ArtifactLayoutDescriptor } }> } {
+interface RegistryLike {
+  runtimes: Record<string, { runtime?: { artifactLayout?: ArtifactLayoutDescriptor } }>;
+}
+
+function getRegistry(): RegistryLike {
   return _require('./capability-registry.cjs') as {
     runtimes: Record<string, { runtime?: { artifactLayout?: ArtifactLayoutDescriptor } }>;
   };
@@ -431,19 +428,24 @@ function dispatchKindEntry(entry: ArtifactKindDescriptor, runtime: string, confi
  * instead of a hardcoded switch statement.
  */
 function resolveRuntimeArtifactLayout(runtime: string, configDir: string, scope: 'local' | 'global' = 'global'): Layout {
+  return resolveRuntimeArtifactLayoutFromRegistry(getRegistry(), runtime, configDir, scope);
+}
+
+function resolveRuntimeArtifactLayoutFromRegistry(
+  registry: RegistryLike,
+  runtime: string,
+  configDir: string,
+  scope: 'local' | 'global' = 'global',
+): Layout {
   if (typeof configDir !== 'string' || configDir === '') {
     throw new TypeError('configDir must be a non-empty string');
   }
   if (scope !== 'local' && scope !== 'global') {
     throw new TypeError('scope must be "local" or "global"');
   }
-  if (!ALLOWED_RUNTIMES.has(runtime)) {
-    throw new TypeError(`Unknown runtime: '${runtime}' — add to runtime-artifact-layout.cjs table`);
-  }
 
-  const desc = getRegistry().runtimes[runtime]?.runtime?.artifactLayout;
+  const desc = registry.runtimes[runtime]?.runtime?.artifactLayout;
   if (!desc) {
-    // Runtime is in ALLOWED_RUNTIMES but has no descriptor — reproduce old default: throw.
     throw new TypeError(`Unknown runtime: '${runtime}' — add to runtime-artifact-layout.cjs table`);
   }
 
@@ -453,4 +455,4 @@ function resolveRuntimeArtifactLayout(runtime: string, configDir: string, scope:
   return { runtime, configDir, scope, kinds };
 }
 
-export = { resolveRuntimeArtifactLayout, findInstallSourceRoot, getInstallExports };
+export = { resolveRuntimeArtifactLayout, resolveRuntimeArtifactLayoutFromRegistry, findInstallSourceRoot, getInstallExports };

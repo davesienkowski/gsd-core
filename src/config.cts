@@ -235,7 +235,6 @@ function buildNewProjectConfig(userChoices: Record<string, unknown>): Record<str
       ui_phase: true,
       ui_safety_gate: true,
       ai_integration_phase: true,
-      tdd_mode: false,
       human_verify_mode: 'end-of-phase',
       text_mode: false,
       research_before_questions: false,
@@ -263,7 +262,7 @@ function buildNewProjectConfig(userChoices: Record<string, unknown>): Record<str
     project_code: null,
     phase_naming: 'sequential',
     agent_skills: {},
-    claude_md_path: './CLAUDE.md',
+    claude_md_path: './.claude/CLAUDE.md',
     plan_review: {
       source_grounding: true,
       source_grounding_authority: 'grep',

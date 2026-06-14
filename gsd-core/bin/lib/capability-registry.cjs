@@ -7,6 +7,55 @@
  */
 
 const capabilities = {
+  "ai-integration": {
+    "id": "ai-integration",
+    "role": "feature",
+    "title": "AI design contract",
+    "description": "AI-SPEC design contract workflow for phases that build AI systems; owns the AI integration command, agents, and workflow.ai_integration_phase activation key.",
+    "tier": "full",
+    "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [
+      "ai-integration-phase"
+    ],
+    "agents": [
+      "gsd-framework-selector",
+      "gsd-ai-researcher",
+      "gsd-domain-researcher",
+      "gsd-eval-planner"
+    ],
+    "hooks": [],
+    "config": {
+      "workflow.ai_integration_phase": {
+        "type": "boolean",
+        "default": true,
+        "description": "Prompt for an AI-SPEC design contract before planning phases that involve AI systems."
+      }
+    },
+    "steps": [
+      {
+        "point": "plan:pre",
+        "ref": {
+          "skill": "ai-integration-phase"
+        },
+        "produces": [
+          "AI-SPEC.md"
+        ],
+        "consumes": [
+          "CONTEXT.md"
+        ],
+        "when": "workflow.ai_integration_phase",
+        "onError": "skip"
+      }
+    ],
+    "contributions": [],
+    "gates": []
+  },
   "antigravity": {
     "id": "antigravity",
     "role": "runtime",
@@ -69,6 +118,12 @@ const capabilities = {
     "description": "Open-artifact audit and UAT-gap audit for milestone close gates; exposes `gsd-tools audit-uat` (cross-phase UAT outstanding items) and `gsd-tools audit-open` (structured open-artifact scan across debug, tasks, threads, todos, seeds, UAT, verification, context-questions).",
     "tier": "full",
     "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
     "skills": [],
     "agents": [],
     "config": {},
@@ -254,6 +309,63 @@ const capabilities = {
       "permissionWriter": null,
       "extendedHookEvents": []
     }
+  },
+  "code-review": {
+    "id": "code-review",
+    "role": "feature",
+    "title": "Code review",
+    "description": "Source-file code review and review-fix workflow support for completed execution work.",
+    "tier": "full",
+    "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [
+      "code-review"
+    ],
+    "agents": [
+      "gsd-code-reviewer",
+      "gsd-code-fixer"
+    ],
+    "hooks": [],
+    "config": {
+      "workflow.code_review": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable code-review participation in post-execution review flows."
+      },
+      "workflow.code_review_depth": {
+        "type": "enum",
+        "values": [
+          "quick",
+          "standard",
+          "deep"
+        ],
+        "default": "standard",
+        "description": "Default depth for code review when no --depth override is supplied."
+      }
+    },
+    "steps": [
+      {
+        "point": "execute:post",
+        "ref": {
+          "skill": "code-review"
+        },
+        "produces": [
+          "REVIEW.md"
+        ],
+        "consumes": [
+          "SUMMARY.md"
+        ],
+        "when": "workflow.code_review",
+        "onError": "skip"
+      }
+    ],
+    "contributions": [],
+    "gates": []
   },
   "codebuddy": {
     "id": "codebuddy",
@@ -483,6 +595,103 @@ const capabilities = {
       "extendedHookEvents": []
     }
   },
+  "drift": {
+    "id": "drift",
+    "role": "feature",
+    "title": "Drift detection gates",
+    "description": "Post-execution drift detection gates that run after each wave completes. Provides two gates at execute:wave:post: a blocking schema drift gate (detects schema files changed without a database push) and a non-blocking codebase drift gate (detects structural additions not reflected in STRUCTURE.md).",
+    "tier": "full",
+    "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [],
+    "agents": [],
+    "hooks": [],
+    "config": {
+      "workflow.drift_threshold": {
+        "type": "number",
+        "default": 3,
+        "description": "Minimum number of new structural elements (directories, barrel exports, migrations, routes) before the codebase drift gate triggers a warn or auto-remap action."
+      },
+      "workflow.drift_action": {
+        "type": "enum",
+        "values": [
+          "warn",
+          "auto-remap"
+        ],
+        "default": "warn",
+        "description": "Action taken by the codebase drift gate when the threshold is exceeded: warn (advisory message) or auto-remap (spawn gsd-codebase-mapper agent to refresh STRUCTURE.md)."
+      },
+      "workflow.schema_drift_gate": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable the drift gates at execute:wave:post. When enabled, the schema drift gate blocks verification if schema-relevant files changed during execution but no database push command was executed; the codebase drift gate (non-blocking) warns when structural additions exceed the drift_threshold."
+      }
+    },
+    "steps": [],
+    "contributions": [],
+    "gates": [
+      {
+        "point": "execute:wave:post",
+        "check": {
+          "query": "verify.schema-drift"
+        },
+        "when": "workflow.schema_drift_gate",
+        "blocking": true,
+        "onError": "skip"
+      },
+      {
+        "point": "execute:wave:post",
+        "check": {
+          "query": "verify.codebase-drift"
+        },
+        "when": "workflow.schema_drift_gate",
+        "blocking": false,
+        "onError": "skip"
+      }
+    ]
+  },
+  "gap-analysis": {
+    "id": "gap-analysis",
+    "role": "feature",
+    "title": "Post-planning gap analysis",
+    "description": "Proactive, non-blocking post-planning coverage report. After all PLAN.md files are generated, cross-references every REQ-ID and D-ID from REQUIREMENTS.md and CONTEXT.md against plan bodies. Emits a Source | Item | Status table. Does not block phase advancement.",
+    "tier": "standard",
+    "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [],
+    "agents": [],
+    "hooks": [],
+    "config": {
+      "workflow.post_planning_gaps": {
+        "type": "boolean",
+        "default": true,
+        "description": "Run the post-planning gap analysis report after plans are generated."
+      }
+    },
+    "steps": [],
+    "contributions": [],
+    "gates": [
+      {
+        "point": "plan:post",
+        "check": {
+          "query": "gap-analysis.plan-post"
+        },
+        "when": "workflow.post_planning_gaps",
+        "blocking": false,
+        "onError": "skip"
+      }
+    ]
+  },
   "gemini": {
     "id": "gemini",
     "role": "runtime",
@@ -543,6 +752,12 @@ const capabilities = {
     "description": "Build, query, and inspect the project knowledge graph in `.planning/graphs/`; exposes graphify CLI subcommands (build, query, status, diff) and the /gsd-graphify skill.",
     "tier": "full",
     "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
     "skills": [
       "graphify"
     ],
@@ -622,6 +837,12 @@ const capabilities = {
     "description": "Code-intelligence store for codebase querying, diff, snapshot, and API-surface extraction; exposes `gsd-tools intel` subcommands (query, status, update, diff, snapshot, patch-meta, validate, extract-exports, api-surface) and backs `/gsd-map-codebase` and `gsd-intel-updater`.",
     "tier": "full",
     "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
     "skills": [],
     "agents": [],
     "config": {
@@ -639,7 +860,20 @@ const capabilities = {
       }
     ],
     "hooks": [],
-    "steps": [],
+    "steps": [
+      {
+        "point": "plan:pre",
+        "ref": {
+          "command": "intel api-surface"
+        },
+        "produces": [
+          ".planning/intel/API-SURFACE.md"
+        ],
+        "consumes": [],
+        "when": "intel.enabled",
+        "onError": "skip"
+      }
+    ],
     "contributions": [],
     "gates": []
   },
@@ -766,6 +1000,52 @@ const capabilities = {
       "extendedHookEvents": []
     }
   },
+  "nyquist": {
+    "id": "nyquist",
+    "role": "feature",
+    "title": "Nyquist validation",
+    "description": "Validation coverage audit that maps executed work back to tests and manual-only evidence.",
+    "tier": "full",
+    "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [
+      "validate-phase"
+    ],
+    "agents": [
+      "gsd-nyquist-auditor"
+    ],
+    "hooks": [],
+    "config": {
+      "workflow.nyquist_validation": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable Nyquist validation coverage auditing."
+      }
+    },
+    "steps": [
+      {
+        "point": "verify:post",
+        "ref": {
+          "skill": "validate-phase"
+        },
+        "produces": [
+          "VALIDATION.md"
+        ],
+        "consumes": [
+          "SUMMARY.md"
+        ],
+        "when": "workflow.nyquist_validation",
+        "onError": "halt"
+      }
+    ],
+    "contributions": [],
+    "gates": []
+  },
   "opencode": {
     "id": "opencode",
     "role": "runtime",
@@ -832,6 +1112,129 @@ const capabilities = {
       "extendedHookEvents": []
     }
   },
+  "pattern-mapper": {
+    "id": "pattern-mapper",
+    "role": "feature",
+    "title": "Pattern mapping",
+    "description": "Optional codebase-pattern mapping before planning; owns the pattern mapper agent and workflow.pattern_mapper activation key.",
+    "tier": "full",
+    "requires": [
+      "research"
+    ],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [],
+    "agents": [
+      "gsd-pattern-mapper"
+    ],
+    "hooks": [],
+    "config": {
+      "workflow.pattern_mapper": {
+        "type": "boolean",
+        "default": true,
+        "description": "Run the pattern mapper before planning when context or research is available."
+      }
+    },
+    "steps": [
+      {
+        "point": "plan:pre",
+        "ref": {
+          "agent": "gsd-pattern-mapper"
+        },
+        "fragment": {
+          "path": "fragments/plan-pre.md",
+          "inline": "<pattern_mapping_context>\n**Phase:** {phase_number} - {phase_name}\n**Phase directory:** {phase_dir}\n**Padded phase:** {padded_phase}\n\n<files_to_read>\n- {context_path} (USER DECISIONS from /gsd:discuss-phase)\n- {research_path} (Technical Research)\n</files_to_read>\n\n**Output file:** {phase_dir}/{padded_phase}-PATTERNS.md\n\nExtract the list of files to be created/modified from CONTEXT.md and RESEARCH.md. For each file, classify by role and data flow, find the closest existing analog in the codebase, extract concrete code excerpts, and produce PATTERNS.md.\n</pattern_mapping_context>\n"
+        },
+        "produces": [
+          "PATTERNS.md"
+        ],
+        "consumes": [
+          "RESEARCH.md"
+        ],
+        "when": "workflow.pattern_mapper",
+        "onError": "skip"
+      }
+    ],
+    "contributions": [],
+    "gates": []
+  },
+  "profile-pipeline": {
+    "id": "profile-pipeline",
+    "role": "feature",
+    "title": "Developer profiling pipeline",
+    "description": "Developer behavioral profiling from Claude Code session history; scans session JSONL files, extracts and samples user messages, and generates profile artifacts (USER-PROFILE.md, dev-preferences.md, CLAUDE.md sections). Exposes eight `gsd-tools` commands: scan-sessions, extract-messages, profile-sample (pipeline phase) and write-profile, profile-questionnaire, generate-dev-preferences, generate-claude-profile, generate-claude-md (output phase). Backs the /gsd-profile-user skill and gsd-user-profiler agent.",
+    "tier": "full",
+    "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [
+      "profile-user"
+    ],
+    "agents": [
+      "gsd-user-profiler"
+    ],
+    "config": {
+      "profile-pipeline.enabled": {
+        "type": "boolean",
+        "default": false,
+        "description": "Enable the developer profiling pipeline commands (scan-sessions, extract-messages, profile-sample, write-profile, etc.)."
+      }
+    },
+    "commands": [
+      {
+        "family": "scan-sessions",
+        "module": "profile-pipeline-command-router.cjs",
+        "router": "routeScanSessions"
+      },
+      {
+        "family": "extract-messages",
+        "module": "profile-pipeline-command-router.cjs",
+        "router": "routeExtractMessages"
+      },
+      {
+        "family": "profile-sample",
+        "module": "profile-pipeline-command-router.cjs",
+        "router": "routeProfileSample"
+      },
+      {
+        "family": "write-profile",
+        "module": "profile-pipeline-command-router.cjs",
+        "router": "routeWriteProfile"
+      },
+      {
+        "family": "profile-questionnaire",
+        "module": "profile-pipeline-command-router.cjs",
+        "router": "routeProfileQuestionnaire"
+      },
+      {
+        "family": "generate-dev-preferences",
+        "module": "profile-pipeline-command-router.cjs",
+        "router": "routeGenerateDevPreferences"
+      },
+      {
+        "family": "generate-claude-profile",
+        "module": "profile-pipeline-command-router.cjs",
+        "router": "routeGenerateClaudeProfile"
+      },
+      {
+        "family": "generate-claude-md",
+        "module": "profile-pipeline-command-router.cjs",
+        "router": "routeGenerateClaudeMd"
+      }
+    ],
+    "hooks": [],
+    "steps": [],
+    "contributions": [],
+    "gates": []
+  },
   "qwen": {
     "id": "qwen",
     "role": "runtime",
@@ -884,6 +1287,240 @@ const capabilities = {
         "PreCompact"
       ]
     }
+  },
+  "research": {
+    "id": "research",
+    "role": "feature",
+    "title": "Phase research",
+    "description": "Optional phase research before planning; owns the phase researcher agent and workflow.research activation key.",
+    "tier": "standard",
+    "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [],
+    "agents": [
+      "gsd-phase-researcher"
+    ],
+    "hooks": [],
+    "config": {
+      "workflow.research": {
+        "type": "boolean",
+        "default": true,
+        "description": "Run phase research before planning when research artifacts are missing or explicitly refreshed."
+      }
+    },
+    "steps": [
+      {
+        "point": "plan:pre",
+        "ref": {
+          "agent": "gsd-phase-researcher"
+        },
+        "fragment": {
+          "path": "fragments/plan-pre.md",
+          "inline": "<objective>\nResearch how to implement Phase {phase_number}: {phase_name}\nAnswer: \"What do I need to know to PLAN this phase well?\"\n</objective>\n\n<files_to_read>\n- {context_path} (USER DECISIONS from /gsd:discuss-phase)\n- {requirements_path} (Project requirements)\n- {state_path} (Project decisions and history)\n</files_to_read>\n\n${AGENT_SKILLS_RESEARCHER}\n\n<additional_context>\n**Phase description:** {phase_description}\n**Phase requirement IDs (MUST address):** {phase_req_ids}\n\n**Project instructions:** Read ./CLAUDE.md or ./.claude/CLAUDE.md if either exists; follow project-specific guidelines.\n**Project skills:** Check .claude/skills/ or .agents/skills/ directory if either exists. Read SKILL.md files and account for project skill patterns.\n</additional_context>\n\n<output>\nWrite to: {phase_dir}/{phase_num}-RESEARCH.md\n</output>\n"
+        },
+        "produces": [
+          "RESEARCH.md"
+        ],
+        "consumes": [
+          "CONTEXT.md"
+        ],
+        "when": "workflow.research",
+        "onError": "skip"
+      }
+    ],
+    "contributions": [],
+    "gates": []
+  },
+  "schema-gate": {
+    "id": "schema-gate",
+    "role": "feature",
+    "title": "Schema push detection gate",
+    "description": "Detects ORM schema-relevant files in the phase scope during planning and injects a mandatory [BLOCKING] schema push task into the plan. Prevents false-positive verification where build/types pass because TypeScript types come from config, not the live database.",
+    "tier": "full",
+    "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [],
+    "agents": [],
+    "hooks": [],
+    "config": {
+      "workflow.schema_push_detection": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable ORM schema push detection during planning. When schema-relevant files are detected in the phase scope, a [BLOCKING] push task is injected into the plan."
+      }
+    },
+    "steps": [],
+    "contributions": [
+      {
+        "point": "plan:pre",
+        "into": "planner",
+        "fragment": {
+          "path": "fragments/plan-pre.md",
+          "inline": "# Schema Push Detection Gate\n\n> Detects schema-relevant files in the phase scope and injects a mandatory `[BLOCKING]` schema push task into the plan. Prevents false-positive verification where build/types pass because TypeScript types come from config, not the live database.\n\nCheck if any files in the phase scope match schema patterns:\n\n```bash\nPHASE_SECTION=$(gsd_run query roadmap.get-phase \"${PHASE}\" --pick section 2>/dev/null)\n```\n\nScan `PHASE_SECTION`, `CONTEXT.md` (if loaded), and `RESEARCH.md` (if exists) for file paths matching these ORM patterns:\n\n| ORM | File Patterns |\n|-----|--------------|\n| Payload CMS | `src/collections/**/*.ts`, `src/globals/**/*.ts` |\n| Prisma | `prisma/schema.prisma`, `prisma/schema/*.prisma` |\n| Drizzle | `drizzle/schema.ts`, `src/db/schema.ts`, `drizzle/*.ts` |\n| Supabase | `supabase/migrations/*.sql` |\n| TypeORM | `src/entities/**/*.ts`, `src/migrations/**/*.ts` |\n\nAlso check if any existing PLAN.md files for this phase already reference these file patterns in `files_modified`.\n\n**If schema-relevant files detected:**\n\nSet `SCHEMA_PUSH_REQUIRED=true` and `SCHEMA_ORM={detected_orm}`.\n\nDetermine the push command for the detected ORM:\n\n| ORM | Push Command | Non-TTY Workaround |\n|-----|-------------|-------------------|\n| Payload CMS | `npx payload migrate` | `CI=true PAYLOAD_MIGRATING=true npx payload migrate` |\n| Prisma | `npx prisma db push` | `npx prisma db push --accept-data-loss` (if destructive) |\n| Drizzle | `npx drizzle-kit push` | `npx drizzle-kit push` |\n| Supabase | `supabase db push` | Set `SUPABASE_ACCESS_TOKEN` env var |\n| TypeORM | `npx typeorm migration:run` | `npx typeorm migration:run -d src/data-source.ts` |\n\nInject the following into the planner prompt (step 8) as an additional constraint:\n\n```markdown\n<schema_push_requirement>\n**[BLOCKING] Schema Push Required**\n\nThis phase modifies schema-relevant files ({detected_files}). The planner MUST include\na `[BLOCKING]` task that runs the database schema push command AFTER all schema file\nmodifications are complete but BEFORE verification.\n\n- ORM detected: {SCHEMA_ORM}\n- Push command: {push_command}\n- Non-TTY workaround: {env_hint}\n- If push requires interactive prompts that cannot be suppressed, flag the task for\n  manual intervention with `autonomous: false`\n\nThis task is mandatory — the phase CANNOT pass verification without it. Build and\ntype checks will pass without the push (types come from config, not the live database),\ncreating a false-positive verification state.\n</schema_push_requirement>\n```\n\nDisplay: `Schema files detected ({SCHEMA_ORM}) — [BLOCKING] push task will be injected into plans`\n\n**If no schema-relevant files detected:** Skip silently.\n"
+        },
+        "produces": [],
+        "consumes": [
+          "CONTEXT.md"
+        ],
+        "when": "workflow.schema_push_detection",
+        "onError": "skip"
+      }
+    ],
+    "gates": []
+  },
+  "security": {
+    "id": "security",
+    "role": "feature",
+    "title": "Security enforcement",
+    "description": "Threat mitigation verification and ship-time security blocking for phases with security enforcement enabled.",
+    "tier": "full",
+    "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [
+      "secure-phase"
+    ],
+    "agents": [
+      "gsd-security-auditor"
+    ],
+    "hooks": [],
+    "config": {
+      "workflow.security_enforcement": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable security threat-mitigation verification before phase advancement."
+      },
+      "workflow.security_asvs_level": {
+        "type": "number",
+        "default": 1,
+        "description": "OWASP ASVS level used by security review guidance."
+      },
+      "workflow.security_block_on": {
+        "type": "enum",
+        "values": [
+          "critical",
+          "high",
+          "medium",
+          "low",
+          "none"
+        ],
+        "default": "high",
+        "description": "Minimum open threat severity that blocks advancement."
+      }
+    },
+    "steps": [
+      {
+        "point": "verify:post",
+        "ref": {
+          "skill": "secure-phase"
+        },
+        "produces": [
+          "SECURITY.md"
+        ],
+        "consumes": [
+          "SUMMARY.md"
+        ],
+        "when": "workflow.security_enforcement",
+        "onError": "halt"
+      }
+    ],
+    "contributions": [
+      {
+        "point": "plan:pre",
+        "into": "planner",
+        "fragment": {
+          "inline": "Each PLAN.md must include a <threat_model> block when security enforcement is active. Use the configured ASVS level and blocking threshold from workflow.security_asvs_level and workflow.security_block_on."
+        },
+        "configValues": {
+          "security_asvs_level": "workflow.security_asvs_level",
+          "security_block_on": "workflow.security_block_on"
+        },
+        "produces": [],
+        "consumes": [
+          "CONTEXT.md"
+        ],
+        "when": "workflow.security_enforcement"
+      }
+    ],
+    "gates": [
+      {
+        "point": "ship:pre",
+        "check": {
+          "predicate": {
+            "kind": "artifact-frontmatter-equals",
+            "artifact": "SECURITY.md",
+            "field": "threats_open",
+            "equals": 0
+          }
+        },
+        "when": "workflow.security_enforcement",
+        "blocking": true,
+        "onError": "halt"
+      }
+    ]
+  },
+  "tdd": {
+    "id": "tdd",
+    "role": "feature",
+    "title": "Test-driven development",
+    "description": "Injects TDD heuristics into the planner and enforces RED/GREEN gate compliance on type:tdd plans after execution. Owns workflow.tdd_mode; the --tdd CLI flag is the ephemeral override.",
+    "tier": "full",
+    "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
+    "skills": [],
+    "agents": [],
+    "hooks": [],
+    "config": {
+      "workflow.tdd_mode": {
+        "type": "boolean",
+        "default": false,
+        "description": "Enable TDD mode: planner annotates eligible tasks type:tdd and executor enforces RED/GREEN/REFACTOR gate sequence."
+      }
+    },
+    "steps": [],
+    "contributions": [
+      {
+        "point": "plan:pre",
+        "into": "planner",
+        "fragment": {
+          "inline": "<tdd_mode_active>\n**TDD Mode is ENABLED.** Apply TDD heuristics to all eligible tasks:\n- Business logic with defined I/O → type: tdd\n- API endpoints with request/response contracts → type: tdd\n- Data transformations, validation, algorithms → type: tdd\n- UI, config, glue code, CRUD → standard plan (type: execute)\nEach TDD plan gets one feature with RED/GREEN/REFACTOR gate sequence.\n</tdd_mode_active>"
+        },
+        "produces": [],
+        "consumes": [],
+        "when": "workflow.tdd_mode",
+        "onError": "skip"
+      }
+    ],
+    "gates": [
+      {
+        "point": "execute:post",
+        "check": {
+          "query": "tdd.review-checkpoint"
+        },
+        "when": "workflow.tdd_mode",
+        "blocking": false,
+        "onError": "skip"
+      }
+    ]
   },
   "trae": {
     "id": "trae",
@@ -940,6 +1577,12 @@ const capabilities = {
     "description": "UI-SPEC design contract + retrospective UI audit for frontend phases.",
     "tier": "full",
     "requires": [],
+    "runtimeCompat": {
+      "supported": [
+        "*"
+      ],
+      "unsupported": []
+    },
     "skills": [
       "ui-phase",
       "ui-review"
@@ -1070,12 +1713,28 @@ const capabilities = {
 };
 
 const bySkill = {
+  "ai-integration-phase": "ai-integration",
+  "code-review": "code-review",
   "graphify": "graphify",
+  "validate-phase": "nyquist",
+  "profile-user": "profile-pipeline",
+  "secure-phase": "security",
   "ui-phase": "ui",
   "ui-review": "ui"
 };
 
 const byAgent = {
+  "gsd-framework-selector": "ai-integration",
+  "gsd-ai-researcher": "ai-integration",
+  "gsd-domain-researcher": "ai-integration",
+  "gsd-eval-planner": "ai-integration",
+  "gsd-code-reviewer": "code-review",
+  "gsd-code-fixer": "code-review",
+  "gsd-nyquist-auditor": "nyquist",
+  "gsd-pattern-mapper": "pattern-mapper",
+  "gsd-user-profiler": "profile-pipeline",
+  "gsd-phase-researcher": "research",
+  "gsd-security-auditor": "security",
   "gsd-ui-checker": "ui",
   "gsd-ui-auditor": "ui"
 };
@@ -1094,6 +1753,53 @@ const byLoopPoint = {
   "plan:pre": {
     "steps": [
       {
+        "capId": "ai-integration",
+        "point": "plan:pre",
+        "ref": {
+          "skill": "ai-integration-phase"
+        },
+        "produces": [
+          "AI-SPEC.md"
+        ],
+        "consumes": [
+          "CONTEXT.md"
+        ],
+        "when": "workflow.ai_integration_phase",
+        "onError": "skip"
+      },
+      {
+        "capId": "intel",
+        "point": "plan:pre",
+        "ref": {
+          "command": "intel api-surface"
+        },
+        "produces": [
+          ".planning/intel/API-SURFACE.md"
+        ],
+        "consumes": [],
+        "when": "intel.enabled",
+        "onError": "skip"
+      },
+      {
+        "capId": "research",
+        "point": "plan:pre",
+        "ref": {
+          "agent": "gsd-phase-researcher"
+        },
+        "fragment": {
+          "path": "fragments/plan-pre.md",
+          "inline": "<objective>\nResearch how to implement Phase {phase_number}: {phase_name}\nAnswer: \"What do I need to know to PLAN this phase well?\"\n</objective>\n\n<files_to_read>\n- {context_path} (USER DECISIONS from /gsd:discuss-phase)\n- {requirements_path} (Project requirements)\n- {state_path} (Project decisions and history)\n</files_to_read>\n\n${AGENT_SKILLS_RESEARCHER}\n\n<additional_context>\n**Phase description:** {phase_description}\n**Phase requirement IDs (MUST address):** {phase_req_ids}\n\n**Project instructions:** Read ./CLAUDE.md or ./.claude/CLAUDE.md if either exists; follow project-specific guidelines.\n**Project skills:** Check .claude/skills/ or .agents/skills/ directory if either exists. Read SKILL.md files and account for project skill patterns.\n</additional_context>\n\n<output>\nWrite to: {phase_dir}/{phase_num}-RESEARCH.md\n</output>\n"
+        },
+        "produces": [
+          "RESEARCH.md"
+        ],
+        "consumes": [
+          "CONTEXT.md"
+        ],
+        "when": "workflow.research",
+        "onError": "skip"
+      },
+      {
         "capId": "ui",
         "point": "plan:pre",
         "ref": {
@@ -1107,9 +1813,73 @@ const byLoopPoint = {
         ],
         "when": "workflow.ui_phase",
         "onError": "skip"
+      },
+      {
+        "capId": "pattern-mapper",
+        "point": "plan:pre",
+        "ref": {
+          "agent": "gsd-pattern-mapper"
+        },
+        "fragment": {
+          "path": "fragments/plan-pre.md",
+          "inline": "<pattern_mapping_context>\n**Phase:** {phase_number} - {phase_name}\n**Phase directory:** {phase_dir}\n**Padded phase:** {padded_phase}\n\n<files_to_read>\n- {context_path} (USER DECISIONS from /gsd:discuss-phase)\n- {research_path} (Technical Research)\n</files_to_read>\n\n**Output file:** {phase_dir}/{padded_phase}-PATTERNS.md\n\nExtract the list of files to be created/modified from CONTEXT.md and RESEARCH.md. For each file, classify by role and data flow, find the closest existing analog in the codebase, extract concrete code excerpts, and produce PATTERNS.md.\n</pattern_mapping_context>\n"
+        },
+        "produces": [
+          "PATTERNS.md"
+        ],
+        "consumes": [
+          "RESEARCH.md"
+        ],
+        "when": "workflow.pattern_mapper",
+        "onError": "skip"
       }
     ],
-    "contributions": [],
+    "contributions": [
+      {
+        "capId": "schema-gate",
+        "point": "plan:pre",
+        "into": "planner",
+        "fragment": {
+          "path": "fragments/plan-pre.md",
+          "inline": "# Schema Push Detection Gate\n\n> Detects schema-relevant files in the phase scope and injects a mandatory `[BLOCKING]` schema push task into the plan. Prevents false-positive verification where build/types pass because TypeScript types come from config, not the live database.\n\nCheck if any files in the phase scope match schema patterns:\n\n```bash\nPHASE_SECTION=$(gsd_run query roadmap.get-phase \"${PHASE}\" --pick section 2>/dev/null)\n```\n\nScan `PHASE_SECTION`, `CONTEXT.md` (if loaded), and `RESEARCH.md` (if exists) for file paths matching these ORM patterns:\n\n| ORM | File Patterns |\n|-----|--------------|\n| Payload CMS | `src/collections/**/*.ts`, `src/globals/**/*.ts` |\n| Prisma | `prisma/schema.prisma`, `prisma/schema/*.prisma` |\n| Drizzle | `drizzle/schema.ts`, `src/db/schema.ts`, `drizzle/*.ts` |\n| Supabase | `supabase/migrations/*.sql` |\n| TypeORM | `src/entities/**/*.ts`, `src/migrations/**/*.ts` |\n\nAlso check if any existing PLAN.md files for this phase already reference these file patterns in `files_modified`.\n\n**If schema-relevant files detected:**\n\nSet `SCHEMA_PUSH_REQUIRED=true` and `SCHEMA_ORM={detected_orm}`.\n\nDetermine the push command for the detected ORM:\n\n| ORM | Push Command | Non-TTY Workaround |\n|-----|-------------|-------------------|\n| Payload CMS | `npx payload migrate` | `CI=true PAYLOAD_MIGRATING=true npx payload migrate` |\n| Prisma | `npx prisma db push` | `npx prisma db push --accept-data-loss` (if destructive) |\n| Drizzle | `npx drizzle-kit push` | `npx drizzle-kit push` |\n| Supabase | `supabase db push` | Set `SUPABASE_ACCESS_TOKEN` env var |\n| TypeORM | `npx typeorm migration:run` | `npx typeorm migration:run -d src/data-source.ts` |\n\nInject the following into the planner prompt (step 8) as an additional constraint:\n\n```markdown\n<schema_push_requirement>\n**[BLOCKING] Schema Push Required**\n\nThis phase modifies schema-relevant files ({detected_files}). The planner MUST include\na `[BLOCKING]` task that runs the database schema push command AFTER all schema file\nmodifications are complete but BEFORE verification.\n\n- ORM detected: {SCHEMA_ORM}\n- Push command: {push_command}\n- Non-TTY workaround: {env_hint}\n- If push requires interactive prompts that cannot be suppressed, flag the task for\n  manual intervention with `autonomous: false`\n\nThis task is mandatory — the phase CANNOT pass verification without it. Build and\ntype checks will pass without the push (types come from config, not the live database),\ncreating a false-positive verification state.\n</schema_push_requirement>\n```\n\nDisplay: `Schema files detected ({SCHEMA_ORM}) — [BLOCKING] push task will be injected into plans`\n\n**If no schema-relevant files detected:** Skip silently.\n"
+        },
+        "produces": [],
+        "consumes": [
+          "CONTEXT.md"
+        ],
+        "when": "workflow.schema_push_detection",
+        "onError": "skip"
+      },
+      {
+        "capId": "security",
+        "point": "plan:pre",
+        "into": "planner",
+        "fragment": {
+          "inline": "Each PLAN.md must include a <threat_model> block when security enforcement is active. Use the configured ASVS level and blocking threshold from workflow.security_asvs_level and workflow.security_block_on."
+        },
+        "configValues": {
+          "security_asvs_level": "workflow.security_asvs_level",
+          "security_block_on": "workflow.security_block_on"
+        },
+        "produces": [],
+        "consumes": [
+          "CONTEXT.md"
+        ],
+        "when": "workflow.security_enforcement"
+      },
+      {
+        "capId": "tdd",
+        "point": "plan:pre",
+        "into": "planner",
+        "fragment": {
+          "inline": "<tdd_mode_active>\n**TDD Mode is ENABLED.** Apply TDD heuristics to all eligible tasks:\n- Business logic with defined I/O → type: tdd\n- API endpoints with request/response contracts → type: tdd\n- Data transformations, validation, algorithms → type: tdd\n- UI, config, glue code, CRUD → standard plan (type: execute)\nEach TDD plan gets one feature with RED/GREEN/REFACTOR gate sequence.\n</tdd_mode_active>"
+        },
+        "produces": [],
+        "consumes": [],
+        "when": "workflow.tdd_mode",
+        "onError": "skip"
+      }
+    ],
     "gates": [
       {
         "capId": "ui",
@@ -1126,7 +1896,18 @@ const byLoopPoint = {
   "plan:post": {
     "steps": [],
     "contributions": [],
-    "gates": []
+    "gates": [
+      {
+        "capId": "gap-analysis",
+        "point": "plan:post",
+        "check": {
+          "query": "gap-analysis.plan-post"
+        },
+        "when": "workflow.post_planning_gaps",
+        "blocking": false,
+        "onError": "skip"
+      }
+    ]
   },
   "execute:pre": {
     "steps": [],
@@ -1143,6 +1924,26 @@ const byLoopPoint = {
     "contributions": [],
     "gates": [
       {
+        "capId": "drift",
+        "point": "execute:wave:post",
+        "check": {
+          "query": "verify.schema-drift"
+        },
+        "when": "workflow.schema_drift_gate",
+        "blocking": true,
+        "onError": "skip"
+      },
+      {
+        "capId": "drift",
+        "point": "execute:wave:post",
+        "check": {
+          "query": "verify.codebase-drift"
+        },
+        "when": "workflow.schema_drift_gate",
+        "blocking": false,
+        "onError": "skip"
+      },
+      {
         "capId": "ui",
         "point": "execute:wave:post",
         "check": {
@@ -1155,9 +1956,36 @@ const byLoopPoint = {
     ]
   },
   "execute:post": {
-    "steps": [],
+    "steps": [
+      {
+        "capId": "code-review",
+        "point": "execute:post",
+        "ref": {
+          "skill": "code-review"
+        },
+        "produces": [
+          "REVIEW.md"
+        ],
+        "consumes": [
+          "SUMMARY.md"
+        ],
+        "when": "workflow.code_review",
+        "onError": "skip"
+      }
+    ],
     "contributions": [],
-    "gates": []
+    "gates": [
+      {
+        "capId": "tdd",
+        "point": "execute:post",
+        "check": {
+          "query": "tdd.review-checkpoint"
+        },
+        "when": "workflow.tdd_mode",
+        "blocking": false,
+        "onError": "skip"
+      }
+    ]
   },
   "verify:pre": {
     "steps": [],
@@ -1166,6 +1994,36 @@ const byLoopPoint = {
   },
   "verify:post": {
     "steps": [
+      {
+        "capId": "nyquist",
+        "point": "verify:post",
+        "ref": {
+          "skill": "validate-phase"
+        },
+        "produces": [
+          "VALIDATION.md"
+        ],
+        "consumes": [
+          "SUMMARY.md"
+        ],
+        "when": "workflow.nyquist_validation",
+        "onError": "halt"
+      },
+      {
+        "capId": "security",
+        "point": "verify:post",
+        "ref": {
+          "skill": "secure-phase"
+        },
+        "produces": [
+          "SECURITY.md"
+        ],
+        "consumes": [
+          "SUMMARY.md"
+        ],
+        "when": "workflow.security_enforcement",
+        "onError": "halt"
+      },
       {
         "capId": "ui",
         "point": "verify:post",
@@ -1188,7 +2046,23 @@ const byLoopPoint = {
   "ship:pre": {
     "steps": [],
     "contributions": [],
-    "gates": []
+    "gates": [
+      {
+        "capId": "security",
+        "point": "ship:pre",
+        "check": {
+          "predicate": {
+            "kind": "artifact-frontmatter-equals",
+            "artifact": "SECURITY.md",
+            "field": "threats_open",
+            "equals": 0
+          }
+        },
+        "when": "workflow.security_enforcement",
+        "blocking": true,
+        "onError": "halt"
+      }
+    ]
   },
   "ship:post": {
     "steps": [],
@@ -1198,14 +2072,81 @@ const byLoopPoint = {
 };
 
 const configKeys = {
+  "workflow.ai_integration_phase": "ai-integration",
+  "workflow.code_review": "code-review",
+  "workflow.code_review_depth": "code-review",
+  "workflow.drift_threshold": "drift",
+  "workflow.drift_action": "drift",
+  "workflow.schema_drift_gate": "drift",
+  "workflow.post_planning_gaps": "gap-analysis",
   "graphify.enabled": "graphify",
   "intel.enabled": "intel",
+  "workflow.nyquist_validation": "nyquist",
+  "workflow.pattern_mapper": "pattern-mapper",
+  "profile-pipeline.enabled": "profile-pipeline",
+  "workflow.research": "research",
+  "workflow.schema_push_detection": "schema-gate",
+  "workflow.security_enforcement": "security",
+  "workflow.security_asvs_level": "security",
+  "workflow.security_block_on": "security",
+  "workflow.tdd_mode": "tdd",
   "workflow.ui_phase": "ui",
   "workflow.ui_review": "ui",
   "workflow.ui_safety_gate": "ui"
 };
 
 const configSchema = {
+  "workflow.ai_integration_phase": {
+    "owner": "ai-integration",
+    "type": "boolean",
+    "default": true,
+    "description": "Prompt for an AI-SPEC design contract before planning phases that involve AI systems."
+  },
+  "workflow.code_review": {
+    "owner": "code-review",
+    "type": "boolean",
+    "default": true,
+    "description": "Enable code-review participation in post-execution review flows."
+  },
+  "workflow.code_review_depth": {
+    "owner": "code-review",
+    "type": "enum",
+    "default": "standard",
+    "description": "Default depth for code review when no --depth override is supplied.",
+    "values": [
+      "quick",
+      "standard",
+      "deep"
+    ]
+  },
+  "workflow.drift_threshold": {
+    "owner": "drift",
+    "type": "number",
+    "default": 3,
+    "description": "Minimum number of new structural elements (directories, barrel exports, migrations, routes) before the codebase drift gate triggers a warn or auto-remap action."
+  },
+  "workflow.drift_action": {
+    "owner": "drift",
+    "type": "enum",
+    "default": "warn",
+    "description": "Action taken by the codebase drift gate when the threshold is exceeded: warn (advisory message) or auto-remap (spawn gsd-codebase-mapper agent to refresh STRUCTURE.md).",
+    "values": [
+      "warn",
+      "auto-remap"
+    ]
+  },
+  "workflow.schema_drift_gate": {
+    "owner": "drift",
+    "type": "boolean",
+    "default": true,
+    "description": "Enable the drift gates at execute:wave:post. When enabled, the schema drift gate blocks verification if schema-relevant files changed during execution but no database push command was executed; the codebase drift gate (non-blocking) warns when structural additions exceed the drift_threshold."
+  },
+  "workflow.post_planning_gaps": {
+    "owner": "gap-analysis",
+    "type": "boolean",
+    "default": true,
+    "description": "Run the post-planning gap analysis report after plans are generated."
+  },
   "graphify.enabled": {
     "owner": "graphify",
     "type": "boolean",
@@ -1217,6 +2158,67 @@ const configSchema = {
     "type": "boolean",
     "default": false,
     "description": "Enable the intel code-intelligence command."
+  },
+  "workflow.nyquist_validation": {
+    "owner": "nyquist",
+    "type": "boolean",
+    "default": true,
+    "description": "Enable Nyquist validation coverage auditing."
+  },
+  "workflow.pattern_mapper": {
+    "owner": "pattern-mapper",
+    "type": "boolean",
+    "default": true,
+    "description": "Run the pattern mapper before planning when context or research is available."
+  },
+  "profile-pipeline.enabled": {
+    "owner": "profile-pipeline",
+    "type": "boolean",
+    "default": false,
+    "description": "Enable the developer profiling pipeline commands (scan-sessions, extract-messages, profile-sample, write-profile, etc.)."
+  },
+  "workflow.research": {
+    "owner": "research",
+    "type": "boolean",
+    "default": true,
+    "description": "Run phase research before planning when research artifacts are missing or explicitly refreshed."
+  },
+  "workflow.schema_push_detection": {
+    "owner": "schema-gate",
+    "type": "boolean",
+    "default": true,
+    "description": "Enable ORM schema push detection during planning. When schema-relevant files are detected in the phase scope, a [BLOCKING] push task is injected into the plan."
+  },
+  "workflow.security_enforcement": {
+    "owner": "security",
+    "type": "boolean",
+    "default": true,
+    "description": "Enable security threat-mitigation verification before phase advancement."
+  },
+  "workflow.security_asvs_level": {
+    "owner": "security",
+    "type": "number",
+    "default": 1,
+    "description": "OWASP ASVS level used by security review guidance."
+  },
+  "workflow.security_block_on": {
+    "owner": "security",
+    "type": "enum",
+    "default": "high",
+    "description": "Minimum open threat severity that blocks advancement.",
+    "values": [
+      "critical",
+      "high",
+      "medium",
+      "low",
+      "none"
+    ]
+  },
+  "workflow.tdd_mode": {
+    "owner": "tdd",
+    "type": "boolean",
+    "default": false,
+    "description": "Enable TDD mode: planner annotates eligible tasks type:tdd and executor enforces RED/GREEN/REFACTOR gate sequence."
   },
   "workflow.ui_phase": {
     "owner": "ui",
@@ -2142,6 +3144,26 @@ const commandFamilies = {
     "module": "audit-command-router.cjs",
     "router": "routeAuditUat"
   },
+  "extract-messages": {
+    "capId": "profile-pipeline",
+    "module": "profile-pipeline-command-router.cjs",
+    "router": "routeExtractMessages"
+  },
+  "generate-claude-md": {
+    "capId": "profile-pipeline",
+    "module": "profile-pipeline-command-router.cjs",
+    "router": "routeGenerateClaudeMd"
+  },
+  "generate-claude-profile": {
+    "capId": "profile-pipeline",
+    "module": "profile-pipeline-command-router.cjs",
+    "router": "routeGenerateClaudeProfile"
+  },
+  "generate-dev-preferences": {
+    "capId": "profile-pipeline",
+    "module": "profile-pipeline-command-router.cjs",
+    "router": "routeGenerateDevPreferences"
+  },
   "graphify": {
     "capId": "graphify",
     "module": "graphify-command-router.cjs",
@@ -2151,12 +3173,47 @@ const commandFamilies = {
     "capId": "intel",
     "module": "intel-command-router.cjs",
     "router": "routeIntelCommand"
+  },
+  "profile-questionnaire": {
+    "capId": "profile-pipeline",
+    "module": "profile-pipeline-command-router.cjs",
+    "router": "routeProfileQuestionnaire"
+  },
+  "profile-sample": {
+    "capId": "profile-pipeline",
+    "module": "profile-pipeline-command-router.cjs",
+    "router": "routeProfileSample"
+  },
+  "scan-sessions": {
+    "capId": "profile-pipeline",
+    "module": "profile-pipeline-command-router.cjs",
+    "router": "routeScanSessions"
+  },
+  "write-profile": {
+    "capId": "profile-pipeline",
+    "module": "profile-pipeline-command-router.cjs",
+    "router": "routeWriteProfile"
   }
 };
 
 const capabilityClusters = {
+  "ai-integration": [
+    "ai-integration-phase"
+  ],
+  "code-review": [
+    "code-review"
+  ],
   "graphify": [
     "graphify"
+  ],
+  "nyquist": [
+    "validate-phase"
+  ],
+  "profile-pipeline": [
+    "profile-user"
+  ],
+  "security": [
+    "secure-phase"
   ],
   "ui": [
     "ui-phase",
@@ -2165,7 +3222,37 @@ const capabilityClusters = {
 };
 
 const profileMembership = {
+  "ai-integration": {
+    "tier": "full",
+    "profiles": [
+      "full"
+    ]
+  },
+  "code-review": {
+    "tier": "full",
+    "profiles": [
+      "full"
+    ]
+  },
   "graphify": {
+    "tier": "full",
+    "profiles": [
+      "full"
+    ]
+  },
+  "nyquist": {
+    "tier": "full",
+    "profiles": [
+      "full"
+    ]
+  },
+  "profile-pipeline": {
+    "tier": "full",
+    "profiles": [
+      "full"
+    ]
+  },
+  "security": {
     "tier": "full",
     "profiles": [
       "full"
@@ -2180,23 +3267,36 @@ const profileMembership = {
 };
 
 const _requiresGraph = {
+  "ai-integration": [],
   "antigravity": [],
   "audit": [],
   "augment": [],
   "claude": [],
   "cline": [],
+  "code-review": [],
   "codebuddy": [],
   "codex": [],
   "copilot": [],
   "cursor": [],
+  "drift": [],
+  "gap-analysis": [],
   "gemini": [],
   "graphify": [],
   "hermes": [],
   "intel": [],
   "kilo": [],
   "kimi": [],
+  "nyquist": [],
   "opencode": [],
+  "pattern-mapper": [
+    "research"
+  ],
+  "profile-pipeline": [],
   "qwen": [],
+  "research": [],
+  "schema-gate": [],
+  "security": [],
+  "tdd": [],
   "trae": [],
   "ui": [],
   "windsurf": []
