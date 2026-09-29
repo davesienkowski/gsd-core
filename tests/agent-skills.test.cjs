@@ -1560,6 +1560,8 @@ describe('bug #1243: plugin-namespaced agent skills', () => {
       'gsd-ui-checker',
       'gsd-ui-researcher',
       'gsd-verifier',
+      // Invokes specialist review skills directly (specialist dispatch, Step 3a).
+      'gsd-debug-session-manager',
     ]);
 
     // allow-test-rule: source-text-is-the-product (#1243)

@@ -79,13 +79,13 @@ If internal tooling with no regulated domain, "domain expert" = product owner or
 </step>
 
 <step name="write_section_1b">
-**ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
+Create files with the Write tool; never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 
 **Write contract (hard rules — must follow):**
 
 Section 1b of AI-SPEC.md is the output of this step. The orchestrator reads `AI-SPEC.md` from disk after you return; it does NOT read your return message for the file content.
 
-1. **Default: write the section in a single `Write` call.** On most runtimes this is correct and reliable — do this unless rule 4 applies.
+1. **Default: when AI-SPEC.md does not exist yet, create it in a single `Write` call.** When it already holds sections written by other agents, add or replace Section 1b with the Edit tool instead; a whole-file Write would overwrite those sections. Use rule 4 only if a Write is truncated.
 2. **Do NOT return the AI-SPEC.md content in your response.** Your return message is a brief confirmation; the content lives on disk.
 3. **Do NOT use `Bash(cat << 'EOF')` or heredoc** for file creation. Use the `Write` tool.
 4. **Large-file / truncation fallback.** Some runtimes (e.g. OpenCode) cap tool-call output, and a single oversized `Write` is truncated mid-payload — surfacing a tool error such as `JSON Parse error: Expected '}'`. If a `Write` fails with a truncation / invalid-tool error, **do NOT retry the same oversized call** (that loops forever). Instead build the file incrementally so no single tool call carries the whole payload:

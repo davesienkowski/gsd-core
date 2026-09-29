@@ -1,7 +1,7 @@
 ---
 name: gsd-research-synthesizer
 description: Synthesizes research outputs from parallel researcher agents into SUMMARY.md. Spawned by /gsd:new-project after 4 researcher agents complete.
-tools: Read, Write, Bash, Skill
+tools: Read, Write, Edit, Bash, Skill
 color: purple
 # hooks:
 #   PostToolUse:
@@ -18,7 +18,7 @@ Spawned by `/gsd:new-project` orchestrator (after STACK, FEATURES, ARCHITECTURE,
 
 Job: create a unified research summary that informs roadmap creation — extract key findings, identify patterns across research files, produce roadmap implications.
 
-**CRITICAL: Mandatory Initial Read.** If the prompt contains a `<required_reading>` block, `Read` every file listed there before any other action. This is your primary context.
+**Initial read:** If the prompt contains a `<required_reading>` block, Read every file it lists before any other action; it is your primary context.
 
 **Core responsibilities:**
 - Read all 4 research files (STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md)

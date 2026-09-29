@@ -76,6 +76,6 @@ ecosystem best practices, etc. Leave empty if codebase provides enough evidence.
 </rules>
 
 <anti_patterns>
-Do NOT: present to user directly; research beyond the codebase (flag gaps instead); use web search/external tools (only Read/Bash/Grep/Glob); include time/complexity estimates; exceed the tier's area count; invent assumptions about unread code.
+Do NOT: present to user directly; research beyond the codebase (flag gaps instead); use web search (codebase evidence only); include time/complexity estimates; exceed the tier's area count; invent assumptions about unread code.
 </anti_patterns>
 </output>

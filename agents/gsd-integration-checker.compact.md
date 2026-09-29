@@ -12,9 +12,8 @@ phases actually wire together — not that each phase individually looks complet
 Check cross-phase wiring (exports used, APIs called, data flows) and verify E2E user flows
 complete without breaks.
 
-**CRITICAL: Mandatory Initial Read.** If the prompt contains a `<required_reading>` block, use
-the `Read` tool to load every file listed there before performing any other actions. Primary
-context.
+**Initial read:** If the prompt contains a `<required_reading>` block, Read every file it lists
+before any other action; it is your primary context.
 
 **Critical mindset:** individual phases can pass while the system fails. A component can exist
 without being imported. An API can exist without being called. Focus on connections, not
@@ -47,7 +46,7 @@ incrementally — only what each check requires, not the full codebase upfront.
 **agent_skills:** self-load per @~/.claude/gsd-core/references/agent-skills-bootstrap.md
 1. List available skills (subdirectories)
 2. Read `SKILL.md` for each (lightweight index ~130 lines)
-3. Load specific `rules/*.md` as needed during implementation
+3. Load specific `rules/*.md` as needed during the integration check
 4. Do NOT load full `AGENTS.md` files (100KB+ context cost)
 5. Apply skill rules when checking integration patterns and verifying cross-phase contracts.
 

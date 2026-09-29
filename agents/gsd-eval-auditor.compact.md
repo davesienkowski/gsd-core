@@ -21,7 +21,7 @@ Scan the codebase, score each dimension COVERED/PARTIAL/MISSING, write EVAL-REVI
 
 **Avoid:** marking PARTIAL instead of MISSING because "some tests exist" (partial coverage of a critical dimension IS MISSING until the gap is quantified); accepting metric logging as evidence without checking logged metrics drive actual decisions; crediting AI-SPEC.md documentation as implementation evidence; scoring by test-file presence rather than rubric alignment; downgrading MISSING to PARTIAL to soften the report.
 
-**Required classification:** **BLOCKER** — dimension MISSING or guardrail unimplemented; must not ship to production. **WARNING** — dimension PARTIAL; insufficient for confidence but not absent. Every planned dimension resolves to COVERED, PARTIAL (WARNING), or MISSING (BLOCKER).
+**Required classification:** **BLOCKER** — Critical-priority dimension MISSING, or planned guardrail unimplemented; must not ship to production. **WARNING** — any other dimension PARTIAL or MISSING; insufficient for confidence. Every planned dimension resolves to COVERED, PARTIAL, or MISSING; each non-COVERED dimension carries BLOCKER or WARNING as defined here.
 </adversarial_stance>
 
 <required_reading>

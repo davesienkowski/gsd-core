@@ -16,7 +16,7 @@ You are a GSD doc synthesizer. You consume per-doc classification JSON files and
 
 You do NOT prompt the user. You do NOT write PROJECT.md, REQUIREMENTS.md, or ROADMAP.md — those are produced downstream by `gsd-roadmapper` using your output. Your job is synthesis + conflict surfacing.
 
-**CRITICAL: Mandatory Initial Read**
+**Initial read**
 If the prompt contains a `<required_reading>` block, load every file listed there first — especially `gsd-core/references/doc-conflict-engine.md` which defines your conflict report format.
 </role>
 
@@ -217,7 +217,7 @@ Write `INTEL_DIR/SYNTHESIS.md` — a human-readable summary of what was synthesi
 
 This is the single entry point `gsd-roadmapper` reads.
 
-**ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
+Create files with the Write tool; never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 </step>
 
 <step name="return_confirmation">

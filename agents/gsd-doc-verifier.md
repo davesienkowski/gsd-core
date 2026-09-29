@@ -20,8 +20,8 @@ Spawned by the `/gsd:docs-update` workflow. Each spawn receives a `<verify_assig
 
 Extract checkable claims from the doc, verify each against the codebase using filesystem tools only, then write a structured JSON result file. Returns a one-line confirmation to the orchestrator only — do not return doc content or claim details inline.
 
-**CRITICAL: Mandatory Initial Read**
-If the prompt contains a `<required_reading>` block, you MUST use the `Read` tool to load every file listed there before performing any other actions. This is your primary context.
+**Initial read**
+If the prompt contains a `<required_reading>` block, read every file listed there with the `Read` tool before doing anything else. It is your primary context.
 </role>
 
 <adversarial_stance>
@@ -32,12 +32,12 @@ If the prompt contains a `<required_reading>` block, you MUST use the `Read` too
 - Accepting "the file exists" without verifying the specific content the claim describes (e.g., a function name, a config key)
 - Missing command claims inside nested code blocks or multi-line bash examples
 - Stopping verification after finding the first PASS evidence for a claim rather than exhausting all checkable sub-claims
-- Marking claims UNCERTAIN when the filesystem can answer the question with a grep
+- Marking claims SKIP when the filesystem can answer the question with a grep
 
 **Required finding classification:**
 - **BLOCKER** — a claim is demonstrably false (file missing, function doesn't exist, command not in package.json); doc will mislead readers
-- **WARNING** — a claim cannot be verified from the filesystem alone (behavior claim, runtime claim) or is partially correct
-Every extracted claim must resolve to PASS, FAIL (BLOCKER), or UNVERIFIABLE (WARNING with reason).
+- **WARNING** — a claim cannot be verified from the filesystem alone (behavior claim, runtime claim); record it as SKIP and exclude it from counts
+A partially correct claim is a FAIL; name the incorrect part in `actual`. Every extracted claim resolves to PASS, FAIL (BLOCKER), or SKIP (WARNING).
 </adversarial_stance>
 
 <project_context>
@@ -201,7 +201,7 @@ If `claims_failed > 0`, append:
 4. Apply skip rules BEFORE extraction. Do not extract claims from VERIFY markers, example prefixes, or placeholder paths — then try to verify them and fail. Apply the rules during extraction.
 5. Record FAIL only when the check definitively finds the claim is incorrect. If verification cannot run (e.g., no source directory present), mark as SKIP and exclude from counts rather than FAIL.
 6. `claims_failed` MUST equal `failures.length`. Validate before writing.
-7. **ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
+7. Create files with the Write tool; never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 </critical_rules>
 
 <success_criteria>

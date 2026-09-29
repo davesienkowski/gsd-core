@@ -42,7 +42,7 @@ GSD uses a multi-agent architecture where thin orchestrators (workflow files) sp
 |----------|-------|
 | **Spawned by** | `/gsd-new-project`, `/gsd-new-milestone` |
 | **Parallelism** | 4 instances (stack, features, architecture, pitfalls) |
-| **Tools** | Read, Write, Bash, Grep, Glob, Skill, WebSearch, WebFetch, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__firecrawl__*, mcp__exa__*, mcp__tavily__*, mcp__ref__*, mcp__jina__*, mcp__perplexity__* |
+| **Tools** | Read, Write, Edit, Bash, Grep, Glob, Skill, WebSearch, WebFetch, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__firecrawl__*, mcp__exa__*, mcp__tavily__*, mcp__ref__*, mcp__jina__*, mcp__perplexity__* |
 | **Model (balanced)** | Sonnet |
 | **Color** | Cyan |
 | **Produces** | `.planning/research/STACK.md`, `FEATURES.md`, `ARCHITECTURE.md`, `PITFALLS.md` |
@@ -85,7 +85,7 @@ GSD uses a multi-agent architecture where thin orchestrators (workflow files) sp
 |----------|-------|
 | **Spawned by** | `/gsd-ui-phase` |
 | **Parallelism** | Single instance |
-| **Tools** | Read, Write, Edit, Bash, Grep, Glob, Skill, WebSearch, WebFetch, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__firecrawl__*, mcp__exa__*, mcp__tavily__*, mcp__ref__*, mcp__jina__* |
+| **Tools** | Read, Write, Edit, Bash, Grep, Glob, Skill, WebSearch, WebFetch, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__firecrawl__*, mcp__exa__*, mcp__tavily__*, mcp__ref__*, mcp__jina__*, AskUserQuestion |
 | **Model (balanced)** | Sonnet |
 | **Color** | Purple |
 | **Produces** | `{phase}-UI-SPEC.md` |
@@ -152,7 +152,7 @@ GSD uses a multi-agent architecture where thin orchestrators (workflow files) sp
 |----------|-------|
 | **Spawned by** | `/gsd-new-project` (after 4 researchers complete) |
 | **Parallelism** | Single instance (sequential after researchers) |
-| **Tools** | Read, Write, Bash, Skill |
+| **Tools** | Read, Write, Edit, Bash, Skill |
 | **Model (balanced)** | Sonnet |
 | **Color** | Purple |
 | **Produces** | `.planning/research/SUMMARY.md` |
@@ -194,7 +194,7 @@ GSD uses a multi-agent architecture where thin orchestrators (workflow files) sp
 |----------|-------|
 | **Spawned by** | `/gsd-new-project` |
 | **Parallelism** | Single instance |
-| **Tools** | Read, Write, Bash, Glob, Grep, Skill |
+| **Tools** | Read, Write, Edit, Bash, Glob, Grep, Skill |
 | **Model (balanced)** | Sonnet |
 | **Color** | Purple |
 | **Produces** | `ROADMAP.md` |
@@ -617,7 +617,7 @@ Twelve additional agents ship under `agents/gsd-*.md` and are used by specialty 
 |----------|-------|
 | **Spawned by** | `/gsd-debug` |
 | **Parallelism** | Single instance (interactive, stateful) |
-| **Tools** | Read, Write, Edit, Bash, Grep, Glob, Agent, AskUserQuestion |
+| **Tools** | Read, Write, Edit, Bash, Grep, Glob, Agent, AskUserQuestion, Skill |
 | **Model (balanced)** | Sonnet |
 | **Color** | Orange |
 | **Produces** | Compact summary returned to main context; evolves the `.planning/debug/{slug}.md` session file |

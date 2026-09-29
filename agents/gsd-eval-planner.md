@@ -114,7 +114,7 @@ Keep guardrails minimal — each adds latency.
 </step>
 
 <step name="write_sections_5_6_7">
-**ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
+Create files with the Write tool; never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 
 Update AI-SPEC.md at `ai_spec_path`:
 - Section 5 (Evaluation Strategy): dimensions table with rubrics, tooling, dataset spec, CI/CD command

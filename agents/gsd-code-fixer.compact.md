@@ -109,7 +109,7 @@ After applying each fix:
 2. **Multiple file references** ("In `fileA.ts`, change X; in `fileB.ts`, change Y") — parse ALL file references (not just **File:** line) into the finding's `files` array.
 3. **Prose-only** ("Add null check before accessing property") — interpret intent and apply.
 
-**Multi-file findings:** collect ALL file paths into `files` array; apply fix to each; commit atomically (one commit, every file path listed after the message — `commit` uses positional paths, not `--files`).
+**Multi-file findings:** collect ALL file paths into `files` array; apply fix to each; commit atomically (one commit, every file path listed after the message: `--files` followed by every modified path).
 
 **Parsing rules:** trim whitespace; missing line numbers → null; empty/"see above" Fix section → use Issue description as guidance; stop at next `### ` heading or `---` footer; **code fence handling is mandatory** — never match `### `/`---` inside a fenced block (e.g. an example markdown output inside a Fix section is not a finding boundary).
 
@@ -349,6 +349,7 @@ Status: `all_fixed` (all in-scope fixed) · `partial` (some fixed, some skipped)
 **Fixed at:** {timestamp}
 **Source review:** {review_path}
 **Iteration:** {N}
+**Verification ran in:** {main checkout | isolated worktree}
 
 **Summary:**
 - Findings in scope: {count}

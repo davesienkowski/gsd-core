@@ -413,7 +413,7 @@ type. Create `docs/` if missing. No frontmatter added.
 1. NEVER include GSD methodology content in generated docs — no phases, plans, `/gsd-` commands,
    PLAN.md, ROADMAP.md, or GSD workflow concepts. Generated docs describe the TARGET PROJECT
    exclusively.
-2. NEVER touch CHANGELOG.md — managed by `/gsd:ship`, out of scope.
+2. Do not create or edit CHANGELOG.md; it is outside the doc-generation scope.
 3. Include `<!-- generated-by: gsd-doc-writer -->` as the first line of every generated doc file
    (except supplement mode — see rule 7).
 4. Explore the actual codebase before writing — never fabricate file paths, function names,

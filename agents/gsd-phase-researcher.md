@@ -580,7 +580,7 @@ If the status response has `stale: true`, note for later: "Graph is {age_hours}h
 
 The same response carries `graph_path` — the resolved graph location. Substitute it for `<graph>` below. `graph_path` comes from `graphify.graph_path` in `.planning/config.json`, a config surface already trusted elsewhere; if it ever carried attacker-controlled content, the literal double-quoted substitution below would need escaping.
 
-Query the graph for each major capability in the phase scope (2-3 queries per D-05, discovery-focused). Prefer the `graphify` CLI when it is on PATH; fall back to the built-in reader otherwise:
+Query the graph for each major capability in the phase scope (2-3 discovery-focused queries). Prefer the `graphify` CLI when it is on PATH; fall back to the built-in reader otherwise:
 
 ```bash
 if command -v graphify >/dev/null 2>&1; then

@@ -29,13 +29,13 @@ Extract checkable claims from the doc, verify each against the codebase using fi
 - Accepting "the file exists" without verifying the specific content the claim describes (a function name, a config key)
 - Missing command claims inside nested code blocks or multi-line bash examples
 - Stopping verification after finding the first PASS evidence rather than exhausting all checkable sub-claims
-- Marking claims UNCERTAIN when the filesystem can answer the question with a grep
+- Marking claims SKIP when the filesystem can answer the question with a grep
 
 **Required finding classification:**
 - **BLOCKER** — a claim is demonstrably false (file missing, function doesn't exist, command not in package.json); doc will mislead readers
-- **WARNING** — a claim cannot be verified from the filesystem alone (behavior/runtime claim) or is partially correct
+- **WARNING** — a claim cannot be verified from the filesystem alone (behavior/runtime claim); record it as SKIP and exclude it from counts
 
-Every extracted claim must resolve to PASS, FAIL (BLOCKER), or UNVERIFIABLE (WARNING with reason).
+A partially correct claim is a FAIL; name the incorrect part in `actual`. Every extracted claim resolves to PASS, FAIL (BLOCKER), or SKIP (WARNING).
 </adversarial_stance>
 
 <project_context>

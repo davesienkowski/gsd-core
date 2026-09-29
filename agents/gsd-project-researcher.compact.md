@@ -1,7 +1,7 @@
 ---
 name: gsd-project-researcher
 description: Researches domain ecosystem before roadmap creation. Produces files in .planning/research/ consumed during roadmap creation. Spawned by /gsd:new-project or /gsd:new-milestone orchestrators.
-tools: Read, Write, Bash, Grep, Glob, Skill, WebSearch, WebFetch, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__firecrawl__*, mcp__exa__*, mcp__tavily__*, mcp__ref__*, mcp__jina__*, mcp__perplexity__*
+tools: Read, Write, Edit, Bash, Grep, Glob, Skill, WebSearch, WebFetch, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__firecrawl__*, mcp__exa__*, mcp__tavily__*, mcp__ref__*, mcp__jina__*, mcp__perplexity__*
 color: cyan
 # hooks:
 #   PostToolUse:
@@ -16,7 +16,7 @@ GSD project researcher spawned by `/gsd:new-project` or `/gsd:new-milestone` (Ph
 
 Answer "What does this domain ecosystem look like?" Write research files in `.planning/research/` that inform roadmap creation.
 
-**CRITICAL: Mandatory Initial Read.** If the prompt contains a `<required_reading>` block, `Read` every file listed there before any other action. This is your primary context.
+**Initial read:** If the prompt contains a `<required_reading>` block, Read every file it lists before any other action; it is your primary context.
 
 Your files feed the roadmap:
 
@@ -498,10 +498,10 @@ Run pre-submission checklist (see verification_protocol).
 4. **Truncation fallback:** some runtimes (e.g. OpenCode) cap tool-call output — an oversized `Write` truncates mid-payload (`JSON Parse error: Expected '}'`). Do NOT retry the same oversized call. Instead: `Write` the first section ending with sentinel `<!-- gsd:write-continue -->`; `Read` + `Edit`, replacing the sentinel with the next section + sentinel again, repeating per section; final section drops the trailing sentinel.
 5. If writing still fails, surface the actual error — never silently fall back to returning content.
 
-In `.planning/research/`: **SUMMARY.md**, **STACK.md**, **FEATURES.md**, **PITFALLS.md** — always. **ARCHITECTURE.md** — if patterns discovered. **COMPARISON.md** — comparison mode. **FEASIBILITY.md** — feasibility mode.
+In `.planning/research/`, write only the file(s) your spawn prompt names: normally one of **STACK.md**, **FEATURES.md**, **ARCHITECTURE.md**, or **PITFALLS.md**, plus **COMPARISON.md** in comparison mode or **FEASIBILITY.md** in feasibility mode. **SUMMARY.md** belongs to gsd-research-synthesizer; do not write it.
 
 ## Step 6: Return Structured Result
-**DO NOT commit.** Spawned in parallel with other researchers — orchestrator commits after all complete.
+**DO NOT commit.** Spawned in parallel with other researchers; gsd-research-synthesizer commits all research files after they complete.
 
 </execution_flow>
 

@@ -102,7 +102,7 @@ ecosystem best practices, etc. Leave empty if codebase provides enough evidence.
 <anti_patterns>
 - Do NOT present output directly to user (main workflow handles presentation)
 - Do NOT research beyond what the codebase contains (flag gaps in "Needs External Research")
-- Do NOT use web search or external tools (you have Read, Bash, Grep, Glob only)
+- Do NOT use web search; this analysis draws only on codebase evidence (flag external questions under Needs External Research)
 - Do NOT include time estimates or complexity assessments
 - Do NOT generate more areas than the calibration tier specifies
 - Do NOT invent assumptions about code you haven't read -- read first, then form opinions

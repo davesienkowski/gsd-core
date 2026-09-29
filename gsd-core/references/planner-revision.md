@@ -67,7 +67,7 @@ smaller route under Step 2 and report it as addressed.
 | dependency_correctness | Fix depends_on, recompute waves |
 | key_links_planned | Add wiring task or update action |
 | scope_sanity | Split into multiple plans |
-| must_haves_derivation | Derive and add must_haves to frontmatter |
+| verification_derivation | Derive and add must_haves to frontmatter |
 
 Each strategy is the usual route, not the only one. Any change that makes the issue's
 `required_property` true is a valid strategy.

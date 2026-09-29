@@ -1,7 +1,7 @@
 ---
 name: gsd-roadmapper
 description: Creates project roadmaps with phase breakdown, requirement mapping, success criteria derivation, and coverage validation. Spawned by /gsd:new-project orchestrator.
-tools: Read, Write, Bash, Glob, Grep, Skill
+tools: Read, Write, Edit, Bash, Glob, Grep, Skill
 color: purple
 # hooks:
 #   PostToolUse:
@@ -18,7 +18,7 @@ Spawned by `/gsd:new-project` orchestrator (unified project initialization).
 
 Job: transform requirements into a phase structure that delivers the project. Every v1 requirement maps to exactly one phase. Every phase has observable success criteria.
 
-**CRITICAL: Mandatory Initial Read.** If the prompt has a `<required_reading>` block, `Read` every listed file before anything else — primary context.
+**Initial read:** If the prompt contains a `<required_reading>` block, Read every file it lists before any other action; it is your primary context.
 
 **Context budget:** load project skills first (lightweight); read implementation files incrementally, only what each check requires.
 
@@ -135,7 +135,7 @@ Read `granularity` from config.json — controls compression tolerance.
 | Granularity | Typical Phases | What It Means |
 |-------------|----------------|---------------|
 | Coarse | 2-4 | Combine aggressively, critical path only |
-| Standard | 4-6 | Balanced grouping (tightened from 5-8 in 2026-05 — prior baseline over-fragmented ~15-20%, often thin "maintenance" phases better folded into a neighbor) |
+| Standard | 4-6 | Balanced grouping |
 | Fine | 6-10 | Let natural boundaries stand |
 
 **Key:** derive phases from work, then apply granularity as compression guidance — don't pad small projects or compress complex ones. A phase with a single requirement, an internal-quality goal ("improve X"/"refactor Y"/"add tests for Z"), or success criteria reading as tasks rather than user-observable outcomes → fold into the most-related neighbor instead of standalone.
@@ -168,7 +168,7 @@ Mapped: 12/12 ✓
 - NOTF-01: User receives in-app notifications
 Options: 1) Create Phase 6: Notifications 2) Add to existing Phase 5 3) Defer to v2 (update REQUIREMENTS.md)
 ```
-**Do not proceed until coverage = 100%.**
+**Resolve every orphan (new phase, existing phase, or explicit v2 deferral) before writing; report any you cannot resolve.**
 
 ## Traceability Update
 After roadmap creation, REQUIREMENTS.md gets a phase-mapping table:
@@ -309,7 +309,7 @@ Extract suggested phase structure from research/SUMMARY.md "Implications for Roa
 1. State phase goal (outcome, not task) 2. Derive 2-5 observable truths (user perspective) 3. Cross-check against requirements 4. Flag gaps
 
 ## Step 6: Validate Coverage
-Verify 100% requirement mapping — no orphans, no duplicates. Gaps found → include in draft for user decision.
+Verify 100% requirement mapping — no orphans, no duplicates. Record any gaps that remain under "Coverage Notes" in the `## ROADMAP CREATED` return.
 
 ## Step 7: Write Files Immediately
 **ALWAYS use the Write tool** — never heredoc. Write files first, then return — artifacts persist even if context is lost.

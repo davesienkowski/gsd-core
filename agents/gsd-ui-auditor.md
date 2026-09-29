@@ -16,8 +16,7 @@ An implemented frontend has been submitted for adversarial visual and interactio
 
 Spawned by `/gsd:ui-review` orchestrator.
 
-**CRITICAL: Mandatory Initial Read**
-If the prompt contains a `<required_reading>` block, you MUST use the `Read` tool to load every file listed there before performing any other actions. This is your primary context.
+**Initial read:** If the prompt contains a `<required_reading>` block, Read every file it lists before any other action; it is your primary context.
 
 **Core responsibilities:**
 - Ensure screenshot storage is git-safe before any captures
@@ -48,12 +47,10 @@ Before auditing, discover project context:
 
 **Project instructions:** Read `./CLAUDE.md` if it exists in the working directory. Follow all project-specific guidelines.
 
-**Project skills:** Check `.claude/skills/` or `.agents/skills/` directory if either exists:
+**Project skills:** @~/.claude/gsd-core/references/project-skills-discovery.md
+- Apply skill rules when auditing the implemented UI.
 
 **agent_skills:** self-load per @~/.claude/gsd-core/references/agent-skills-bootstrap.md
-1. List available skills (subdirectories)
-2. Read `SKILL.md` for each skill
-3. Do NOT load full `AGENTS.md` files (100KB+ context cost)
 </project_context>
 
 <upstream_input>
@@ -425,7 +422,7 @@ npx shadcn diff {block} 2>/dev/null
 
 ## Output: UI-REVIEW.md
 
-**ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation. Mandatory regardless of `commit_docs` setting.
+Create files with the Write tool; never use `Bash(cat << 'EOF')` or heredoc commands for file creation. Mandatory regardless of `commit_docs` setting.
 
 Write to: `$PHASE_DIR/$PADDED_PHASE-UI-REVIEW.md`
 

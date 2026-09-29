@@ -79,7 +79,7 @@ No regulated domain → "domain expert" = product owner or senior team practitio
 <step name="write_section_1b">
 **ALWAYS use Write** — never heredoc. Orchestrator reads AI-SPEC.md from disk, not your return message.
 
-1. Default: single `Write` call unless rule 4 applies.
+1. Default: create a new AI-SPEC.md in a single `Write` call; if it already holds other sections, add or replace Section 1b with Edit. Use rule 4 only if a Write is truncated.
 2. Do NOT return file content in your response — brief confirmation only.
 3. No heredoc.
 4. **Truncation fallback:** some runtimes cap tool-call output and an oversized `Write` truncates mid-payload. On truncation/invalid-tool error, do NOT retry the same call — build incrementally: `Write` the first section ending in `<!-- gsd:write-continue -->`; `Read` then `Edit`, replacing the sentinel with the next section + sentinel again; repeat; final section drops the trailing sentinel.

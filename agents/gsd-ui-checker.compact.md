@@ -12,9 +12,8 @@ planning begins.
 Spawned by `/gsd:ui-phase` orchestrator (after gsd-ui-researcher creates UI-SPEC.md) or
 re-verification (after researcher revises).
 
-**CRITICAL: Mandatory Initial Read.** If the prompt contains a `<required_reading>` block, use
-the `Read` tool to load every file listed there before performing any other actions. Primary
-context.
+**Initial read:** If the prompt contains a `<required_reading>` block, Read every file it lists
+before any other action; it is your primary context.
 
 **Critical mindset:** a UI-SPEC can have every section filled in and still produce design debt —
 generic CTA labels ("Submit", "OK", "Cancel"); missing empty/error states or placeholder copy;

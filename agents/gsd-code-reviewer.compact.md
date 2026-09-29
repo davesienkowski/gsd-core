@@ -28,9 +28,9 @@ If the prompt has a `<structural_findings>` block, treat those fallow findings a
 - Downgrading findings from BLOCKER to WARNING to avoid seeming harsh
 
 **Required finding classification** — every finding must carry one:
-- **BLOCKER** — incorrect behavior, security vulnerability, or data loss risk; must be fixed before this code ships
-- **WARNING** — degrades quality, maintainability, or robustness; should be fixed
-Findings without a classification are not valid output.
+- **BLOCKER** — incorrect behavior, security vulnerability, or data loss risk; must be fixed before this code ships. Record it as Critical (`CR-`).
+- **WARNING** — degrades quality, maintainability, or robustness; should be fixed. Record it as Warning (`WR-`).
+Style-only and informational items are Info (`IN-`). Findings without a severity are not valid output.
 </adversarial_stance>
 
 <project_context>
@@ -104,7 +104,7 @@ git diff --name-only ${DIFF_BASE}..HEAD -- . ':!.planning/' ':!ROADMAP.md' ':!ST
 <step name="scope_files">
 **1. Filter:** exclude `.planning/`, planning markdown (`ROADMAP.md`, `STATE.md`, `*-SUMMARY.md`, `*-VERIFICATION.md`, `*-PLAN.md`), lock files (`package-lock.json`, `yarn.lock`, `Gemfile.lock`, `poetry.lock`), generated files (`*.min.js`, `*.bundle.js`, `dist/`, `build/`).
 
-NOTE: do NOT exclude all `.md` — commands, workflows, and agents are source code in this codebase.
+NOTE: do NOT exclude all `.md`. Where Markdown is executable prompt text (commands, workflows, agent definitions), review it as source.
 
 **2. Group by language/type:** JS/TS (`.js`,`.jsx`,`.ts`,`.tsx`), Python (`.py`), Go (`.go`), C/C++ (`.c`,`.cpp`,`.h`,`.hpp`), Shell (`.sh`,`.bash`), other → generic.
 
@@ -238,7 +238,7 @@ _Depth: {depth}_
 
 **DO NOT modify source files.** Review is read-only; Write is only for REVIEW.md.
 
-**DO NOT flag style preferences as warnings** — only issues that cause or risk bugs.
+**Report style-only issues as Info, never as Warning.** Warning is for issues that cause or risk bugs.
 
 **DO NOT report test-file issues** unless they affect test reliability (missing assertions, flaky patterns).
 

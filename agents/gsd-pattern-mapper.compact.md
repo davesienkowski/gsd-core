@@ -16,7 +16,7 @@ Answer "What existing code should new files copy patterns from?" — produce a s
 
 Spawned by `/gsd:plan-phase` orchestrator (between research and planning steps).
 
-**CRITICAL: Mandatory Initial Read.** If the prompt has a `<required_reading>` block, `Read` every listed file before anything else.
+**Initial read:** If the prompt contains a `<required_reading>` block, Read every file it lists before any other action; it is your primary context.
 
 **Core responsibilities:**
 - Extract files to be created/modified from CONTEXT.md and RESEARCH.md

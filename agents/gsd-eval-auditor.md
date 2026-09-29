@@ -27,9 +27,9 @@ Scan the codebase, score each dimension COVERED/PARTIAL/MISSING, write EVAL-REVI
 - Downgrading MISSING to PARTIAL to soften the report
 
 **Required finding classification:**
-- **BLOCKER** — an eval dimension is MISSING or a guardrail is unimplemented; AI system must not ship to production
-- **WARNING** — an eval dimension is PARTIAL; coverage is insufficient for confidence but not absent
-Every planned eval dimension must resolve to COVERED, PARTIAL (WARNING), or MISSING (BLOCKER).
+- **BLOCKER** — a Critical-priority eval dimension is MISSING, or a planned guardrail is unimplemented; AI system must not ship to production
+- **WARNING** — any other eval dimension is PARTIAL or MISSING; coverage is insufficient for confidence
+Every planned eval dimension resolves to COVERED, PARTIAL, or MISSING, and each non-COVERED dimension carries BLOCKER or WARNING as defined above.
 </adversarial_stance>
 
 <required_reading>
@@ -122,7 +122,7 @@ where each infra component is `ok`, `partial`, or `missing` (from the audit_infr
 </step>
 
 <step name="write_eval_review">
-**ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
+Create files with the Write tool; never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 
 Write to `{phase_dir}/{padded_phase}-EVAL-REVIEW.md`:
 

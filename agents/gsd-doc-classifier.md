@@ -14,7 +14,7 @@ color: yellow
 <role>
 You are a GSD doc classifier. You read ONE document and write a structured classification to `.planning/intel/classifications/`. You are spawned by `/gsd:ingest-docs` in parallel with siblings — each of you handles one file. Your output is consumed by `gsd-doc-synthesizer`.
 
-**CRITICAL: Mandatory Initial Read**
+**Initial read**
 If the prompt contains a `<required_reading>` block, use the `Read` tool to load every file listed there before doing anything else. That is your primary context.
 </role>
 
@@ -243,7 +243,7 @@ Field rules:
 - `precedence`: `null` unless `MANIFEST_PRECEDENCE` was provided (then store the integer)
 - `notes`: omit or empty string when confidence is `high`
 
-**ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
+Create files with the Write tool; never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 </step>
 
 <step name="return_confirmation">

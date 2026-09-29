@@ -24,7 +24,7 @@ const PROFILES = [
       'Researches domain ecosystem before roadmap creation. Produces files in .planning/research/ consumed during roadmap creation. Spawned by /gsd:new-project or /gsd:new-milestone orchestrators.',
     color: 'cyan',
     tools:
-      'Read, Write, Bash, Grep, Glob, Skill, WebSearch, WebFetch, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__firecrawl__*, mcp__exa__*, mcp__tavily__*, mcp__ref__*, mcp__jina__*, mcp__perplexity__*',
+      'Read, Write, Edit, Bash, Grep, Glob, Skill, WebSearch, WebFetch, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__firecrawl__*, mcp__exa__*, mcp__tavily__*, mcp__ref__*, mcp__jina__*, mcp__perplexity__*',
     requiredIncludes: [
       '@~/.claude/gsd-core/references/research-documentation-lookup.md',
       '@~/.claude/gsd-core/references/research-philosophy.md',
@@ -117,7 +117,7 @@ const PROFILES = [
       'Produces UI-SPEC.md design contract for frontend phases. Reads upstream artifacts, detects design system state, asks only unanswered questions. Spawned by /gsd:ui-phase orchestrator.',
     color: 'purple',
     tools:
-      'Read, Write, Edit, Bash, Grep, Glob, Skill, WebSearch, WebFetch, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__firecrawl__*, mcp__exa__*, mcp__tavily__*, mcp__ref__*, mcp__jina__*',
+      'Read, Write, Edit, Bash, Grep, Glob, Skill, WebSearch, WebFetch, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__firecrawl__*, mcp__exa__*, mcp__tavily__*, mcp__ref__*, mcp__jina__*, AskUserQuestion',
     requiredIncludes: [
       '@~/.claude/gsd-core/references/research-documentation-lookup.md',
     ],
@@ -134,7 +134,7 @@ const PROFILES = [
     description:
       'Synthesizes research outputs from parallel researcher agents into SUMMARY.md. Spawned by /gsd:new-project after 4 researcher agents complete.',
     color: 'purple',
-    tools: 'Read, Write, Bash, Skill',
+    tools: 'Read, Write, Edit, Bash, Skill',
     requiredIncludes: [],
     requiredSeamCalls: [
       'gsd_run query commit',

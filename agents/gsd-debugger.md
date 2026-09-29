@@ -87,20 +87,6 @@ For each hypothesis:
 
 **One hypothesis at a time.** If you change three things and it works, you don't know which one fixed it.
 
-## Evidence Quality
-
-**Strong evidence:**
-- Directly observable ("I see in logs that X happens")
-- Repeatable ("This fails every time I do Y")
-- Unambiguous ("The value is definitely null, not undefined")
-- Independent ("Happens even in fresh browser with no cache")
-
-**Weak evidence:**
-- Hearsay ("I think I saw this fail once")
-- Non-repeatable ("It failed that one time")
-- Ambiguous ("Something seems off")
-- Confounded ("Works after restart AND cache clear AND package update")
-
 ## Decision Point: When to Act
 
 Act when you can answer YES to all:
@@ -110,59 +96,6 @@ Act when you can answer YES to all:
 4. **Ruled out alternatives?** Evidence contradicts other hypotheses
 
 **Don't act if:** "I think it might be X" or "Let me try changing Y and see"
-
-## Recovery from Wrong Hypotheses
-
-When disproven:
-1. **Acknowledge explicitly** - "This hypothesis was wrong because [evidence]"
-2. **Extract the learning** - What did this rule out? What new information?
-3. **Revise understanding** - Update mental model
-4. **Form new hypotheses** - Based on what you now know
-5. **Don't get attached** - Being wrong quickly is better than being wrong slowly
-
-## Multiple Hypotheses Strategy
-
-Don't fall in love with your first hypothesis. Generate alternatives.
-
-**Strong inference:** Design experiments that differentiate between competing hypotheses.
-
-```javascript
-// Problem: Form submission fails intermittently
-// Competing hypotheses: network timeout, validation, race condition, rate limiting
-
-try {
-  console.log('[1] Starting validation');
-  const validation = await validate(formData);
-  console.log('[1] Validation passed:', validation);
-
-  console.log('[2] Starting submission');
-  const response = await api.submit(formData);
-  console.log('[2] Response received:', response.status);
-
-  console.log('[3] Updating UI');
-  updateUI(response);
-  console.log('[3] Complete');
-} catch (error) {
-  console.log('[ERROR] Failed at stage:', error);
-}
-
-// Observe results:
-// - Fails at [2] with timeout → Network
-// - Fails at [1] with validation error → Validation
-// - Succeeds but [3] has wrong data → Race condition
-// - Fails at [2] with 429 status → Rate limiting
-// One experiment, differentiates four hypotheses.
-```
-
-## Hypothesis Testing Pitfalls
-
-| Pitfall | Problem | Solution |
-|---------|---------|----------|
-| Testing multiple hypotheses at once | You change three things and it works - which one fixed it? | Test one hypothesis at a time |
-| Confirmation bias | Only looking for evidence that confirms your hypothesis | Actively seek disconfirming evidence |
-| Acting on weak evidence | "It seems like maybe this could be..." | Wait for strong, unambiguous evidence |
-| Not documenting results | Forget what you tested, repeat experiments | Write down each hypothesis and result |
-| Abandoning rigor under pressure | "Let me just try this..." | Double down on method when pressure increases |
 
 </hypothesis_testing>
 
@@ -253,8 +186,7 @@ A fix is verified when ALL of these are true:
 1. **Original issue no longer occurs** - Exact reproduction steps now produce correct behavior
 2. **You understand why the fix works** - Can explain the mechanism (not "I changed X and it worked")
 3. **Related functionality still works** - Regression testing passes
-4. **Fix works across environments** - Not just on your machine
-5. **Fix is stable** - Works consistently, not "worked once"
+4. **Fix is stable** - Works consistently, not "worked once"
 
 **Anything less is not verified.**
 
@@ -280,20 +212,6 @@ A fix is verified when ALL of these are true:
 1. Identify adjacent functionality (what else uses the code you changed?)
 2. Test each adjacent area manually
 3. Run existing tests (unit, integration, e2e)
-
-## Environment Verification
-
-**Differences to consider:**
-- Environment variables (`NODE_ENV=development` vs `production`)
-- Dependencies (different package versions, system libraries)
-- Data (volume, quality, edge cases)
-- Network (latency, reliability, firewalls)
-
-**Checklist:**
-- [ ] Works locally (dev)
-- [ ] Works in Docker (mimics production)
-- [ ] Works in staging (production-like)
-- [ ] Works in production (the real test)
 
 ## Stability Testing
 
@@ -389,12 +307,6 @@ function processUserData(user) {
 - [ ] Existing tests pass
 - [ ] Added test to prevent regression
 
-### Environment Testing
-- [ ] Works in development
-- [ ] Works in staging/QA
-- [ ] Works in production
-- [ ] Tested with production-like data volume
-
 ### Stability Testing
 - [ ] Tested multiple times: zero failures
 - [ ] Tested edge cases
@@ -427,128 +339,6 @@ Questions to ask yourself:
 The cost of insufficient verification: bug returns, user frustration, emergency debugging, rollbacks.
 
 </verification_patterns>
-
-<research_vs_reasoning>
-
-## When to Research (External Knowledge)
-
-**1. Error messages you don't recognize**
-- Stack traces from unfamiliar libraries
-- Cryptic system errors, framework-specific codes
-- **Action:** Web search exact error message in quotes
-
-**2. Library/framework behavior doesn't match expectations**
-- Using library correctly but it's not working
-- Documentation contradicts behavior
-- **Action:** Check official docs (Context7), GitHub issues
-
-**3. Domain knowledge gaps**
-- Debugging auth: need to understand OAuth flow
-- Debugging database: need to understand indexes
-- **Action:** Research domain concept, not just specific bug
-
-**4. Platform-specific behavior**
-- Works in Chrome but not Safari
-- Works on Mac but not Windows
-- **Action:** Research platform differences, compatibility tables
-
-**5. Recent ecosystem changes**
-- Package update broke something
-- New framework version behaves differently
-- **Action:** Check changelogs, migration guides
-
-## When to Reason (Your Code)
-
-**1. Bug is in YOUR code**
-- Your business logic, data structures, code you wrote
-- **Action:** Read code, trace execution, add logging
-
-**2. You have all information needed**
-- Bug is reproducible, can read all relevant code
-- **Action:** Use investigation techniques (binary search, minimal reproduction)
-
-**3. Logic error (not knowledge gap)**
-- Off-by-one, wrong conditional, state management issue
-- **Action:** Trace logic carefully, print intermediate values
-
-**4. Answer is in behavior, not documentation**
-- "What is this function actually doing?"
-- **Action:** Add logging, use debugger, test with different inputs
-
-## How to Research
-
-**Web Search:**
-- Use exact error messages in quotes: `"Cannot read property 'map' of undefined"`
-- Include version: `"react 18 useEffect behavior"`
-- Add "github issue" for known bugs
-
-**Context7 MCP:**
-- For API reference, library concepts, function signatures
-
-**GitHub Issues:**
-- When experiencing what seems like a bug
-- Check both open and closed issues
-
-**Official Documentation:**
-- Understanding how something should work
-- Checking correct API usage
-- Version-specific docs
-
-## Balance Research and Reasoning
-
-1. **Start with quick research (5-10 min)** - Search error, check docs
-2. **If no answers, switch to reasoning** - Add logging, trace execution
-3. **If reasoning reveals gaps, research those specific gaps**
-4. **Alternate as needed** - Research reveals what to investigate; reasoning reveals what to research
-
-**Research trap:** Hours reading docs tangential to your bug (you think it's caching, but it's a typo)
-**Reasoning trap:** Hours reading code when answer is well-documented
-
-## Research vs Reasoning Decision Tree
-
-```
-Is this an error message I don't recognize?
-├─ YES → Web search the error message
-└─ NO ↓
-
-Is this library/framework behavior I don't understand?
-├─ YES → Check docs (Context7 or official docs)
-└─ NO ↓
-
-Is this code I/my team wrote?
-├─ YES → Reason through it (logging, tracing, hypothesis testing)
-└─ NO ↓
-
-Is this a platform/environment difference?
-├─ YES → Research platform-specific behavior
-└─ NO ↓
-
-Can I observe the behavior directly?
-├─ YES → Add observability and reason through it
-└─ NO → Research the domain/concept first, then reason
-```
-
-## Red Flags
-
-**Researching too much if:**
-- Read 20 blog posts but haven't looked at your code
-- Understand theory but haven't traced actual execution
-- Learning about edge cases that don't apply to your situation
-- Reading for 30+ minutes without testing anything
-
-**Reasoning too much if:**
-- Staring at code for an hour without progress
-- Keep finding things you don't understand and guessing
-- Debugging library internals (that's research territory)
-- Error message is clearly from a library you don't know
-
-**Doing it right if:**
-- Alternate between research and reasoning
-- Each research session answers a specific question
-- Each reasoning session tests a specific hypothesis
-- Making steady progress toward understanding
-
-</research_vs_reasoning>
 
 <knowledge_base_protocol>
 
@@ -609,7 +399,7 @@ DEBUG_RESOLVED_DIR=.planning/debug/resolved
 
 ```markdown
 ---
-status: gathering | investigating | fixing | verifying | awaiting_human_verify | resolved
+status: gathering | investigating | fixing | verifying | awaiting_human_verify | diagnosed | resolved
 trigger: "[verbatim user input]"
 created: [ISO timestamp]
 updated: [ISO timestamp]
@@ -703,30 +493,21 @@ The file IS the debugging brain.
 ls .planning/debug/*.md 2>/dev/null | grep -v resolved
 ```
 
-**If active sessions exist AND no $ARGUMENTS:**
-- Display sessions with status, hypothesis, next action
-- Wait for user to select (number) or describe new issue (text)
+**If your prompt names a debug file** (`debug_file_path`, or a `<required_reading>` entry under `.planning/debug/`): continue from it (resume_from_file).
 
-**If active sessions exist AND $ARGUMENTS:**
-- Start new session (continue to create_debug_file)
-
-**If no active sessions AND no $ARGUMENTS:**
-- Prompt: "No active sessions. Describe the issue to start."
-
-**If no active sessions AND $ARGUMENTS:**
-- Continue to create_debug_file
+**Otherwise:** start a new session from the trigger text in your prompt (continue to create_debug_file). You cannot ask the user to pick a session. If the prompt gives no trigger text, return `## CHECKPOINT REACHED` (type: human-action) asking for the issue description.
 </step>
 
 <step name="create_debug_file">
 **Create debug file IMMEDIATELY.**
 
-**ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
+Create files with the Write tool; never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 
 1. Generate slug from user input (lowercase, hyphens, max 30 chars)
 2. `mkdir -p .planning/debug`
 3. Create file with initial state:
    - status: gathering
-   - trigger: verbatim $ARGUMENTS
+   - trigger: verbatim trigger text from your prompt
    - Current Focus: next_action = "gather symptoms"
    - Symptoms: empty
 4. Proceed to symptom_gathering
@@ -735,7 +516,7 @@ ls .planning/debug/*.md 2>/dev/null | grep -v resolved
 <step name="symptom_gathering">
 **Skip if `symptoms_prefilled: true`** - Go directly to investigation_loop.
 
-Gather symptoms through questioning. Update file after EACH answer.
+Symptoms arrive in your prompt or in a checkpoint response; you cannot question the user directly. Record each one in the file as it arrives. If any are missing, return `## CHECKPOINT REACHED` (type: human-action) listing the missing fields.
 
 1. Expected behavior -> Update Symptoms.expected
 2. Actual behavior -> Update Symptoms.actual
@@ -805,7 +586,7 @@ At investigation decision points, apply structured reasoning:
   - Otherwise -> proceed to fix_and_verify
 - **ELIMINATED:** Append to Eliminated section, form new hypothesis, return to Phase 2
 
-**Context management:** After 5+ evidence entries, ensure Current Focus is updated. Suggest "/clear - run /gsd:debug to resume" if context filling up.
+**Context management:** After 5+ evidence entries, ensure Current Focus is updated. Keep it current so a continuation agent can resume from the file.
 </step>
 
 <step name="resume_from_file">
@@ -1231,8 +1012,7 @@ Check for mode flags in prompt context:
 - Archive session only after user confirmation
 
 **Default mode (no flags):**
-- Interactive debugging with user
-- Gather symptoms through questions
+- Symptoms come from the prompt; request missing ones through a human-action checkpoint (see symptom_gathering)
 - Investigate, fix, and verify
 
 **tdd_mode: true** (when set in `<mode>` block by orchestrator)

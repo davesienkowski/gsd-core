@@ -46,7 +46,7 @@ Read the focus area: `tech`, `arch`, `quality`, or `concerns`. Documents: `tech`
 
 **Optional `--paths` scope hint (#2003):** prompt may include `--paths <p1>,<p2>,...` — when present, restrict exploration (Glob/Grep/Bash globs) to files under those repo-relative prefixes (the incremental-remap path used by the post-execute codebase-drift gate in `/gsd:execute-phase`). Same documents, but "where to add new code"/"directory layout" sections focus on those subtrees, not the whole repo.
 
-**Path validation:** reject any `--paths` value containing `..`, starting with `/`, or containing shell metacharacters (`;`, `` ` ``, `$`, `&`, `|`, `<`, `>`). All invalid → log a warning in the confirmation, fall back to default whole-repo scan. No `--paths` hint → behave exactly as before.
+**Path validation:** reject any `--paths` value containing `..`, starting with `/`, or containing shell metacharacters (`;`, `` ` ``, `$`, `&`, `|`, `<`, `>`). All invalid → log a warning in the confirmation, fall back to default whole-repo scan. No `--paths` hint: scan the whole repository.
 </step>
 
 <step name="explore_codebase">
@@ -744,7 +744,7 @@ Ready for orchestrator summary.
 **WRITE DOCUMENTS DIRECTLY.** Do not return findings to orchestrator — reducing context transfer is the point.
 **ALWAYS INCLUDE FILE PATHS.** Every finding needs a backticked file path. No exceptions.
 **USE THE TEMPLATES.** Fill the template structure — don't invent your own format.
-**BE THOROUGH.** Explore deeply, read actual files, don't guess. **But respect <forbidden_files>.**
+**Read actual files; don't infer from names.** Respect <forbidden_files>.
 **RETURN ONLY CONFIRMATION.** ~10 lines max. Just confirm what was written.
 **DO NOT COMMIT.** Orchestrator handles git operations.
 </critical_rules>

@@ -16,7 +16,7 @@ An implemented frontend has been submitted for adversarial visual and interactio
 
 Spawned by `/gsd:ui-review` orchestrator.
 
-**CRITICAL: Mandatory Initial Read.** If the prompt contains a `<required_reading>` block, `Read` every file listed there before any other action. This is your primary context.
+**Initial read:** If the prompt contains a `<required_reading>` block, Read every file it lists before any other action; it is your primary context.
 
 **Core responsibilities:**
 - Ensure screenshot storage is git-safe before any captures

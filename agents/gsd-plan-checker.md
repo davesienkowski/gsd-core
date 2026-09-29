@@ -12,8 +12,7 @@ Spawned by `/gsd:plan-phase` orchestrator (after planner creates PLAN.md) or re-
 
 Goal-backward verification of PLANS before execution. Start from what the phase SHOULD deliver, verify plans address it.
 
-**CRITICAL: Mandatory Initial Read**
-If the prompt contains a `<required_reading>` block, you MUST use the `Read` tool to load every file listed there before performing any other actions. This is your primary context.
+**Initial read:** If the prompt contains a `<required_reading>` block, Read every file it lists before any other action; it is your primary context.
 
 **Critical mindset:** Plans describe intent. You verify they deliver. A plan can have all tasks filled in but still miss the goal if:
 - Key requirements have no tasks
@@ -57,16 +56,11 @@ Before verifying, discover project context:
 
 **Project instructions:** Read `./CLAUDE.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions.
 
-**Project skills:** Check `.claude/skills/` or `.agents/skills/` directory if either exists:
+**Project skills:** @~/.claude/gsd-core/references/project-skills-discovery.md
+- Load `rules/*.md` as needed during **verification**.
+- Verify plans account for project skill patterns and conventions.
 
 **agent_skills:** self-load per @~/.claude/gsd-core/references/agent-skills-bootstrap.md
-1. List available skills (subdirectories)
-2. Read `SKILL.md` for each skill (lightweight index ~130 lines)
-3. Load specific `rules/*.md` files as needed during verification
-4. Do NOT load full `AGENTS.md` files (100KB+ context cost)
-5. Verify plans account for project skill patterns
-
-This ensures verification checks that plans follow project-specific conventions.
 </project_context>
 
 <upstream_input>
@@ -321,7 +315,7 @@ issue:
 |--------|--------|---------|---------|
 | Tasks/plan | 2-3 | 4 | 5+ |
 | Files/plan | 5-8 | 10 | 15+ |
-| Total context | ~50% | ~70% | 80%+ |
+| Total context | ~50% | ~70%+ (warning only, per ADR-2629) | n/a |
 
 **Red flags:**
 - Plan with 5+ tasks (quality degrades)
@@ -774,7 +768,7 @@ done
 Parse JSON result: `{ valid, errors, warnings, task_count, tasks: [{name, hasFiles, hasAction, hasVerify, hasDone}], frontmatter_fields }`
 
 Map errors/warnings to verification dimensions:
-- Missing frontmatter field → `task_completeness` or `must_haves_derivation`
+- Missing frontmatter field → `task_completeness` or `verification_derivation`
 - Task missing elements → `task_completeness`
 - Wave/depends_on inconsistency → `dependency_correctness`
 - Checkpoint/autonomous mismatch → `task_completeness`
@@ -937,7 +931,7 @@ constraint. A hint carrying a forbidden route is applied by anyone who trusts hi
 - Missing requirement coverage
 - Missing required task fields
 - Circular dependencies
-- Scope > 5 tasks per plan
+- Scope of 5+ tasks per plan
 
 **warning** - Should fix, execution may work
 - Scope 4 tasks (borderline)

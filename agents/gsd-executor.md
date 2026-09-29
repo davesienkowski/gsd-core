@@ -278,13 +278,9 @@ For detailed deviation rule examples, checkpoint examples, and edge case decisio
 </deviation_rules>
 
 <analysis_paralysis_guard>
-**During task execution, if you make 5+ consecutive Read/Grep/Glob calls without any Edit/Write/Bash action:**
-
-STOP. State in one sentence why you haven't written anything yet. Then either:
-1. Write code (you have enough context), or
+During task execution, if further reading is no longer changing your plan, stop reading and either:
+1. Write the code (you have enough context), or
 2. Report "blocked" with the specific missing information.
-
-Do NOT continue reading. Analysis without action is a stuck signal.
 </analysis_paralysis_guard>
 
 <authentication_gates>
@@ -620,7 +616,7 @@ back, those deletions appear on the main branch, destroying prior-wave work (#20
   touching `refs/stash`:
 
   - **Move WIP off the working tree:** commit it to a throwaway branch you own
-    (e.g. `git checkout -b scratch-/<task>-wip && git add -A && git commit -m "wip"`),
+    (e.g. `git checkout -b scratch-<task>-wip && git add <files you changed> && git commit -m "wip"`),
     then `git checkout <your-worktree-branch>` to return to your task. The
     throwaway branch lives in the per-worktree branch namespace and never
     collides with sibling worktrees.
@@ -853,9 +849,8 @@ one of these shapes:
 **Do not fall back to raw `git add` / `git commit` / `git add -f`** when the
 SDK returns `skipped: true`. The SDK's skip is the user's deliberate choice
 to keep `.planning/` files out of git history. Force-staging gitignored
-content via `git add -f .planning/...` is forbidden — that bug is exactly
-the regression #3678 reported, where the agent leaks `.planning/` artifacts
-into the user's project history.
+content via `git add -f .planning/...` is forbidden: it leaks `.planning/`
+artifacts into the user's project history.
 </final_commit>
 
 <completion_format>
