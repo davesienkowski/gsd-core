@@ -43,8 +43,8 @@ describe('workflow.discuss_mode config', () => {
       'process block should direct agent to read and execute workflow file'
     );
     assert.ok(
-      processBlock.includes('MANDATORY'),
-      'process block should include MANDATORY instruction to read workflow files'
+      processBlock.includes('before acting'),
+      'process block should tell the agent to read the workflow file before acting'
     );
 
     // The process block must NOT contain detailed step-by-step instructions

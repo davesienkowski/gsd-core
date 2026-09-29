@@ -52,7 +52,7 @@ Enabled (N skills, ~T tokens):
 Disabled:
   utility:  health  stats  settings  …
 
-Token cost: ~T (budget cap ~500 tokens for 200k context @ 1%)
+Token cost: ~T
 ```
 
 For `status` also append:

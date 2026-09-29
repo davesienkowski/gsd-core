@@ -50,7 +50,7 @@ Context files are resolved in-workflow using `init phase-op`.
 <process>
 Execute end-to-end.
 
-**MANDATORY:** Read the workflow file BEFORE taking any action. The workflow contains the complete step-by-step process including the Socratic interview loop, ambiguity scoring gate, and SPEC.md generation. Do not improvise from the objective summary above.
+Read the workflow file before acting: the objective above is a summary, and the workflow holds the complete process, including the Socratic interview loop, ambiguity scoring gate, and SPEC.md generation.
 </process>
 
 <success_criteria>

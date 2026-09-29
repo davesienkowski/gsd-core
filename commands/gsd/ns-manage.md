@@ -9,8 +9,6 @@ requires: [config, workspace, workstreams, thread, pause-work, resume-work, upda
 ---
 
 Route to the appropriate management skill based on the user's intent.
-`gsd-config` (settings + advanced + integrations + profile) and `gsd-workspace`
-(new + list + remove) are post-#2790 consolidated entries.
 
 | User wants | Invoke |
 |---|---|

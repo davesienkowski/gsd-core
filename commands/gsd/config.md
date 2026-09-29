@@ -18,14 +18,14 @@ Mode routing:
 - **default** (no flag): Common-case toggles (model, research, plan_check, verifier, branching) → settings workflow
 - **--advanced**: Power-user knobs (planning tuning, timeouts, branch templates, cross-AI execution) → settings-advanced workflow
 - **--integrations**: Third-party API keys, code-review CLI routing, agent-skill injection → settings-integrations workflow
-- **--profile <name>**: Switch model profile (quality|balanced|budget|inherit) → set-profile (inline)
+- **--profile <name>**: Switch model profile (quality|balanced|budget|adaptive|inherit) → set-profile (inline)
 </objective>
 
 <routing>
 
 | Flag | Action | Workflow |
 |------|--------|----------|
-| (none) | Interactive 5-question common-case config prompt | settings |
+| (none) | Interactive common-case config prompt (model profile + workflow toggles) | settings |
 | --advanced | Power-user knobs: planning, execution, discussion, cross-AI, git, runtime | settings-advanced |
 | --integrations | API keys (Brave/Firecrawl/Exa), review CLI routing, agent skills | settings-integrations |
 | --profile &lt;name&gt; | Switch model profile without interactive prompt | gsd-tools query config-set-model-profile |

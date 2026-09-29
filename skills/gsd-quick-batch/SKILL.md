@@ -57,8 +57,8 @@ Context files are resolved inside the workflow (`init quick-batch`,
 
 <process>
 
-**Parse $ARGUMENTS FIRST, before any dispatch.** Route argument validation
-through the CLI's own `quick-batch parse-args` verb — it wraps
+**$ARGUMENTS is validated before any dispatch.** The workflow's Step 1 routes
+argument validation through the CLI's own `quick-batch parse-args` verb, which wraps
 `parseQuickBatchArgs` (`src/quick-batch-dispatch.cts`), the single source of
 truth for this grammar, so the command layer and the workflow layer can never
 silently diverge on what counts as a valid invocation. `$ARGUMENTS` is raw,
@@ -70,10 +70,8 @@ QUICK_BATCH_PARSE=$(gsd_run quick-batch parse-args --raw --text "$ARGUMENTS")
 QUICK_BATCH_PARSE_RC=$?
 ```
 
-(`gsd_run` is defined by the workflow's own preamble — this parse happens
-INSIDE the workflow's Step 1, not before it; the shim is not yet in scope at
-this point in the command file. See `gsd-core/workflows/quick-batch.md` Step
-1 for the literal invocation.)
+(This runs inside the workflow's Step 1, where `gsd_run` is defined; see
+`gsd-core/workflows/quick-batch.md` Step 1 for the literal invocation.)
 
 **If the parse fails** (`$QUICK_BATCH_PARSE_RC != 0`, e.g. `--discuss`/
 `--full` present, or a malformed `--jobs` value): print the CLI's error

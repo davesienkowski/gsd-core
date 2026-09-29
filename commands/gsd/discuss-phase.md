@@ -52,16 +52,16 @@ DISCUSS_MODE=$(gsd_run query config-get workflow.discuss_mode --raw 2>/dev/null 
 ```
 
 If `--assumptions` is in $ARGUMENTS:
-Read and execute `~/.claude/gsd-core/workflows/list-phase-assumptions.md` end-to-end.
+Read and execute `.claude/gsd-core/workflows/list-phase-assumptions.md` relative to the current working directory if it exists, else `~/.claude/gsd-core/workflows/list-phase-assumptions.md`, end-to-end.
 Stop here.
 
 Otherwise, if `DISCUSS_MODE` is `"assumptions"`:
-Read and execute `~/.claude/gsd-core/workflows/discuss-phase-assumptions.md` end-to-end.
+Read and execute `.claude/gsd-core/workflows/discuss-phase-assumptions.md` relative to the current working directory if it exists, else `~/.claude/gsd-core/workflows/discuss-phase-assumptions.md`, end-to-end.
 
 Otherwise (`"discuss"` / unset / any other value):
-Read and execute `~/.claude/gsd-core/workflows/discuss-phase.md` end-to-end.
+Read and execute `.claude/gsd-core/workflows/discuss-phase.md` relative to the current working directory if it exists, else `~/.claude/gsd-core/workflows/discuss-phase.md`, end-to-end.
 
-**MANDATORY:** Read the appropriate workflow file BEFORE taking any action. The objective and success_criteria sections in this command file are summaries — the workflow file contains the complete step-by-step process with all required behaviors, config checks, and interaction patterns. Do not improvise from the summary.
+Read the chosen workflow file before acting: the objective and success_criteria sections in this command file are summaries, and the workflow file holds the complete process, config checks, and interaction patterns.
 
 **Lazy loading:** `templates/context.md` is loaded inside the `write_context` step of the active workflow. `discuss-phase-power.md` is loaded inside `discuss-phase.md` when `--power` is detected. Do not load either here.
 </process>

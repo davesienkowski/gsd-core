@@ -8,7 +8,6 @@ allowed-tools:
 
 
 Route to the appropriate quality / review skill based on the user's intent.
-`gsd-code-review-fix` was absorbed by `gsd-code-review --fix` in #2790.
 
 | User wants | Invoke |
 |---|---|

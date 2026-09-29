@@ -8,7 +8,6 @@ allowed-tools:
 
 
 Route to the appropriate codebase-intelligence skill based on the user's intent.
-`gsd-scan` and `gsd-intel` were folded into `gsd-map-codebase` flags by #2790.
 
 | User wants | Invoke |
 |---|---|

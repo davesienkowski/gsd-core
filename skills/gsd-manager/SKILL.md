@@ -38,7 +38,7 @@ Project context, phase list, dependencies, and recommendations are resolved insi
 
 <process>
 If `--analyze-deps` is in $ARGUMENTS:
-Read and execute `~/.claude/gsd-core/workflows/analyze-dependencies.md` end-to-end.
+Read and execute `.claude/gsd-core/workflows/analyze-dependencies.md` relative to the current working directory if it exists, else `~/.claude/gsd-core/workflows/analyze-dependencies.md`, end-to-end.
 
 Execute end-to-end.
 Maintain the dashboard refresh loop until the user exits or all phases complete.

@@ -8,9 +8,8 @@ allowed-tools:
 
 
 Route to the appropriate exploration / capture skill based on the user's intent.
-`gsd-note`, `gsd-add-todo`, `gsd-add-backlog`, and `gsd-plant-seed` were folded
-into `gsd-capture` (with `--note`, default, `--backlog`, `--seed` modes) by
-#2790. The capture target lists pending todos via `--list`.
+`gsd-capture` takes todos (default), notes (`--note`), backlog items (`--backlog`),
+and seeds (`--seed`), and lists pending todos via `--list`.
 
 | User wants | Invoke |
 |---|---|

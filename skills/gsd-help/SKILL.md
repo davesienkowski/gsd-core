@@ -25,5 +25,5 @@ Arguments: $ARGUMENTS
 </context>
 
 <process>
-Follow ~/.claude/gsd-core/workflows/help.md with $ARGUMENTS.
+Follow the help workflow loaded above with $ARGUMENTS.
 </process>

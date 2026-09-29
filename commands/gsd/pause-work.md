@@ -31,7 +31,7 @@ State and phase progress are gathered in-workflow with targeted reads.
 
 <process>
 If `--report` is in $ARGUMENTS:
-Read and execute `~/.claude/gsd-core/workflows/session-report.md` end-to-end.
+Read and execute `.claude/gsd-core/workflows/session-report.md` relative to the current working directory if it exists, else `~/.claude/gsd-core/workflows/session-report.md`, end-to-end.
 
 **Follow the pause-work workflow**.
 

@@ -26,5 +26,5 @@ Arguments: $ARGUMENTS
 </context>
 
 <process>
-Follow ~/.claude/gsd-core/workflows/smart-entry.md. Detect the situation, present the menu, and dispatch exactly one command. Then stop.
+Follow the smart-entry workflow loaded above. Detect the situation, present the menu, and dispatch exactly one command. Then stop.
 </process>

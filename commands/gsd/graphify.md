@@ -9,7 +9,7 @@ allowed-tools:
 requires: [config, fast, phase, update]
 ---
 
-**STOP -- DO NOT READ THIS FILE. You are already reading it. This prompt was injected into your context by Claude Code's command system. Using the Read tool on this file wastes tokens. Begin executing Step 0 immediately.**
+This skill's text is already in your context; start at Step 0 without re-reading the file.
 
 **CJS-only (graphify):** `graphify` subcommands are not registered on `gsd-tools query`. Use the `gsd_run` launcher shim (defined in each bash block below) or invoke the binary directly: `node <runtime-home>/gsd-core/bin/gsd-tools.cjs graphify …` where `<runtime-home>` is your runtime's config directory (e.g. `~/.claude`, `~/.hermes`, `~/.cursor`). See `docs/CLI-TOOLS.md` for details. Other tooling may still use `gsd-tools query` where a handler exists.
 
@@ -150,7 +150,7 @@ Parse the JSON output:
 - If `error`: display the error message and **STOP**
 - If `action: "spawn_agent"`: pre-flight passed -- proceed with the inline build below
 
-(The `spawn_agent` action name is historical. The skill now performs the build inline because graphify v0.7+ split the build into a fast AST-extraction phase and a separate clustering + report-write phase. Sub-agent isolation kept the cached extraction phase alive but SIGTERM'd the post-extraction phase when the agent exited, leaving the cache populated but no `graph.json` artifacts written. The CLI still emits the `spawn_agent` signal so external callers and tests keep working.)
+(`spawn_agent` here means the pre-flight passed; run the build inline, not in a sub-agent. The CLI keeps that action name for external callers.)
 
 Display:
 
@@ -190,7 +190,7 @@ If the chain succeeds:
 1. **Distinct fill color.** Use `#22c55e` (green) for MVP-mode phase nodes. Standard phases keep the default fill color. Two-channel signaling (color + label) handles color-blind and grayscale renders.
 2. **`MVP` label suffix.** Append ` (MVP)` to the node's label text. Example: a phase originally labeled `Phase 1: User Auth` renders as `Phase 1: User Auth (MVP)`.
 
-Both signals fire together — never just one. Per PRD Q5 decision, the goal is unambiguous visual distinction in any render context.
+Both signals fire together — never just one. The goal is unambiguous visual distinction in any render context.
 
 When the phase mode is null/absent, render with the standard color and label — no behavioral change for non-MVP phases.
 
@@ -198,7 +198,7 @@ When the phase mode is null/absent, render with the standard color and label —
 
 ## Anti-Patterns
 
-1. DO NOT spawn an agent for any operation -- build, query, status, and diff all run inline. Sub-agent isolation terminates background bash when the agent exits, which previously truncated graphify builds mid-write and left only the cache populated (#3166).
+1. DO NOT spawn an agent for any operation -- build, query, status, and diff all run inline. Sub-agent isolation terminates background bash when the agent exits, which truncates graphify builds mid-write and leaves only the cache populated.
 2. DO NOT pass `run_in_background: true` for the build chain -- the operation is fast and must complete in the foreground.
 3. DO NOT modify graph files directly -- always go through `graphify update .` and the snapshot CLI.
 4. DO NOT skip the config gate check.

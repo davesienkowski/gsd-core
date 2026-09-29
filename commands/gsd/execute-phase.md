@@ -1,7 +1,7 @@
 ---
 name: gsd:execute-phase
 description: SDD phase execution — execute all plans in a phase with dependency-aware wave parallelization
-argument-hint: "<phase-number> [--wave N] [--gaps-only] [--interactive] [--tdd]"
+argument-hint: "<phase-number> [--wave N] [--gaps-only] [--interactive]"
 effort: max
 allowed-tools:
   - Read

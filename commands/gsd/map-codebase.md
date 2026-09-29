@@ -34,8 +34,8 @@ Output: .planning/codebase/ folder with 7 structured documents about the codebas
 Arguments: $ARGUMENTS
 
 Parse the first token of $ARGUMENTS:
-- If it is `--fast`: strip the flag, then read and execute `~/.claude/gsd-core/workflows/scan.md` (passing remaining args including optional --focus). Load it on demand here — it is deliberately not in `<execution_context>`, so the common full-map path does not pay for it.
-- If it is `--query`: strip the flag, run the intel workflow (passing remaining args as the subcommand).
+- If it is `--fast`: strip the flag, then read and execute `.claude/gsd-core/workflows/scan.md` relative to the current working directory if it exists, else `~/.claude/gsd-core/workflows/scan.md`, (passing remaining args including optional --focus). Load it on demand here — it is deliberately not in `<execution_context>`, so the common full-map path does not pay for it.
+- If it is `--query`: strip the flag and run the intel CLI inline with the remaining args as the subcommand: `query <term>`, `status`, and `diff` run `gsd_run intel <subcommand>` and display its output; `refresh` runs `gsd_run intel update` and, when that returns `action: "spawn_agent"`, spawns the `gsd-intel-updater` agent.
 - Otherwise: pass all of $ARGUMENTS as focus area to the map-codebase workflow.
 
 **Load project state if exists:**

@@ -9,8 +9,7 @@ requires: [new-project, onboard, new-milestone, complete-milestone, audit-milest
 ---
 
 Route to the appropriate project / milestone skill based on the user's intent.
-`gsd-plan-milestone-gaps` was deleted by #2790 — gap planning now happens
-inline as part of `gsd-audit-milestone`'s output.
+Gap planning happens inline as part of `gsd-audit-milestone`'s output.
 
 | User wants | Invoke |
 |---|---|

@@ -40,7 +40,7 @@ Replaces gsd-plan-phase's internal gsd-plan-checker with external AI reviewers (
 Phase number: extracted from $ARGUMENTS (required)
 
 **Flags:**
-- `--codex` — Use Codex CLI as reviewer (default if no reviewer flag given AND `review.default_reviewers` is unset; otherwise `review.default_reviewers` wins per ADR-0011 — #2315)
+- `--codex` — Use Codex CLI as reviewer (default if no reviewer flag given AND `review.default_reviewers` is unset; otherwise `review.default_reviewers` wins per ADR-0011)
 - `--agy` / `--antigravity` — Use Antigravity CLI as reviewer
 - `--claude` — Use Claude CLI as reviewer (separate session)
 - `--coderabbit` — Use CodeRabbit as reviewer (reviews the working-tree diff, not the source tree)
@@ -55,8 +55,8 @@ Phase number: extracted from $ARGUMENTS (required)
 - `--max-cycles N` — Maximum replan→review cycles (default: 3)
 
 **Feature gate:** This command requires `workflow.plan_review_convergence=true`. Enable with:
-`gsd config-set workflow.plan_review_convergence true`. A dispatch carrying `--override-gate` —
-how `/gsd:autonomous --converge` invokes this workflow (#4600) — bypasses the gate for that run.
+`gsd-tools config-set workflow.plan_review_convergence true`. A dispatch carrying `--override-gate` —
+how `/gsd:autonomous --converge` invokes this workflow — bypasses the gate for that run.
 </context>
 
 <process>
