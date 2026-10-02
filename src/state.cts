@@ -5397,7 +5397,11 @@ function verifyStateWriteIntent(
 const NO_UPDATED_FIELDS: ReadonlyArray<string> = Object.freeze([]);
 
 interface StateWriteIntentResult extends StateWriteIntentVerification {
-  /** True when content reached disk. A verification failure found before the write leaves the file untouched. */
+  /**
+   * True when content reached disk. A §8.2/§8.3 verification failure is found
+   * before the write and leaves the file untouched (`false`); the one
+   * `ok: false` arm with `true` is `reread_mismatch`.
+   */
   readonly written: boolean;
   /** Measured disk delta (`reconcileReportedFields`, extended to sections). Empty unless verified and written. */
   readonly updated: ReadonlyArray<string>;
@@ -5414,11 +5418,14 @@ interface StateWriteIntentResult extends StateWriteIntentVerification {
  *   it verified -> re-read -> confirm the re-read file is exactly the verified
  *   content (§8.2 verifies against the re-read file) -> report `updated[]`
  *   from the measured disk delta.
- * A violation is refused BEFORE the write, so the file is left untouched. If
+ * A §8.2/§8.3 violation is refused BEFORE the write, so the file is left
+ * untouched. The re-read check is the one failure found AFTER the write: if
  * the re-read does not match what was verified, the result is
- * `reasons: ['reread_mismatch']` with `written: true`: the write reached disk
- * but is not verified, and the result says so rather than attempting a
- * restore through a write path that would itself normalize the bytes.
+ * `reasons: ['reread_mismatch']` with `written: true`. The file is NOT restored
+ * on that arm: the write reached disk but is not verified, and the result says
+ * so rather than attempting a restore through a write path that would itself
+ * normalize the bytes. Its `outOfScope` / `missedRequired` are empty, because
+ * the candidate content itself verified; what failed is the disk round-trip.
  *
  * "Loud" means the result, not an exception: a verification failure is a
  * frozen `ok: false` value naming each reason, never a success payload.

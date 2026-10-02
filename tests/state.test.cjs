@@ -22180,6 +22180,36 @@ describe('C2 (ADR-4629 §8.2/§8.3): StateWriteIntent verifying executor', () =>
       assert.strictEqual(fs.readFileSync(statePath, 'utf-8'), PRE);
     });
 
+    // #4935 review: the one failure found AFTER the write. The re-read is forced
+    // to differ from the verified content (a writer outside the lock); the result
+    // must say written=true and ok=false, with no restore attempted.
+    test('a re-read that differs from the verified content is reread_mismatch: ok=false, written=true, not restored', () => {
+      const intent = createStateWriteIntent(openStateTransaction({ snapshot: {}, resync: true }), {
+        assertions: [{ field: 'Status', requirement: 'required', value: 'In progress' }],
+      });
+      const realRead = fs.readFileSync;
+      let reads = 0;
+      fs.readFileSync = function patched(file, ...rest) {
+        const out = realRead.call(this, file, ...rest);
+        if (file === statePath && ++reads === 2) return out + '\ntampered\n';
+        return out;
+      };
+      let result;
+      try {
+        result = applyStateWriteIntent(statePath, intent, setStatus, tmpDir);
+      } finally {
+        fs.readFileSync = realRead;
+      }
+      assert.strictEqual(reads >= 2, true, 'the executor re-read the file after writing');
+      assert.deepStrictEqual(result.reasons, [STATE_WRITE_INTENT_FAILURE.REREAD_MISMATCH]);
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.written, true);
+      assert.deepStrictEqual([...result.outOfScope, ...result.missedRequired], []);
+      assert.deepStrictEqual(result.updated, []);
+      // The verified content reached disk and was not rolled back.
+      assert.ok(fs.readFileSync(statePath, 'utf-8').includes('Status: In progress'));
+    });
+
     test('a rebuild intent is a construction error on this path (rebuild writers stay on writeStateMd)', () => {
       const rebuild = createStateWriteIntent(rebuildStateTransaction({ snapshot: {} }), {});
       assert.throws(() => applyStateWriteIntent(statePath, rebuild, setStatus, tmpDir), { code: 'STATE_TRANSACTION_KIND_INVALID' });
