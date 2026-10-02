@@ -21966,6 +21966,24 @@ describe('C2 (ADR-4629 §8.2/§8.3): StateWriteIntent verifying executor', () =>
     assert.strictEqual(verify(narrowStatus(), crlf, setStatus(PRE), STATE_PATH).ok, true);
   });
 
+  // #4935 review: a declared section resolves to its FIRST occurrence (the one
+  // `readStateTarget` reads) plus that occurrence's positional descendants, the
+  // section analogue of `stateFieldOwnerUnit`. A repeated heading's other
+  // occurrence, and its children, stay out of scope.
+  test('§8.3: a declared section covers only its first occurrence, not a repeated heading of the same name', () => {
+    const pre = PRE.trimEnd() + '\n\n## Notes\n\nfirst\n\n### Detail\n\na\n\n## Notes\n\nsecond\n\n### Detail\n\nb\n';
+    const notes = createStateWriteIntent(openStateTransaction({ snapshot: {} }), {
+      assertions: [{ field: 'Notes', target: 'section', requirement: 'best-effort' }],
+    });
+    const second = verify(notes, pre, pre.replace('second', 'stray'), STATE_PATH);
+    assert.deepStrictEqual(second.outOfScope, [{ region: 'section', name: 'Notes' }]);
+    const secondChild = verify(notes, pre, pre.replace('\nb\n', '\nstray\n'), STATE_PATH);
+    assert.deepStrictEqual(secondChild.outOfScope, [{ region: 'section', name: 'Detail' }]);
+    // Twins: the first occurrence and its child are in scope.
+    assert.strictEqual(verify(notes, pre, pre.replace('first', 'edited'), STATE_PATH).ok, true);
+    assert.strictEqual(verify(notes, pre, pre.replace('\na\n', '\nedited\n'), STATE_PATH).ok, true);
+  });
+
   test('createStateWriteIntent rejects an unknown assertion target', () => {
     assert.throws(
       () => createStateWriteIntent(openStateTransaction({ snapshot: {} }), { assertions: [{ field: 'X', requirement: 'required', target: 'sections' }] }),

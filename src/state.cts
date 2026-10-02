@@ -5139,8 +5139,8 @@ interface StateWriteIntentVerification {
 
 interface StateBodyUnit {
   readonly text: string;
-  /** This unit's heading text plus every enclosing heading's text. */
-  readonly lineage: ReadonlyArray<string>;
+  /** Heading level (1-6); 0 for the preamble. */
+  readonly level: number;
   readonly region: StateOutOfScopeRegion;
 }
 
@@ -5148,8 +5148,8 @@ interface StateBodyUnit {
  * Split a STATE.md body into leaf units for the §8.3 diff: the preamble before
  * the first heading, then one unit per heading running to the NEXT heading of
  * any level, in document order. Leaf granularity means a declared
- * `## Accumulated Context` scope reaches its `### Decisions` child through
- * `lineage`, while an undeclared sibling section stays a separate unit. Built on
+ * `## Accumulated Context` scope reaches its `### Decisions` child by heading
+ * level (`stateSectionScopeUnits`), while an undeclared sibling section stays a separate unit. Built on
  * the markdown-sectionizer seam (ADR-1372), which is fence-aware, so a `#` line
  * inside a code fence is not a heading. A repeated heading gets an occurrence
  * suffix so neither shadows the other.
@@ -5158,19 +5158,16 @@ function collectStateBodyUnits(body: string): Map<string, StateBodyUnit> {
   const units = new Map<string, StateBodyUnit>();
   const sections = collectSections(body, () => true);
   const preambleEnd = sections.length > 0 ? sections[0].heading.offset : body.length;
-  units.set('(preamble)', { text: body.slice(0, preambleEnd).trim(), lineage: [], region: { region: 'preamble', name: '' } });
-  const stack: HeadingToken[] = [];
+  units.set('(preamble)', { text: body.slice(0, preambleEnd).trim(), level: 0, region: { region: 'preamble', name: '' } });
   const occurrences = new Map<string, number>();
   for (const section of sections) {
     const { heading } = section;
-    while (stack.length > 0 && stack[stack.length - 1].level >= heading.level) stack.pop();
-    stack.push(heading);
     const base = `${'#'.repeat(heading.level)} ${heading.text}`;
     const n = (occurrences.get(base) ?? 0) + 1;
     occurrences.set(base, n);
     units.set(n === 1 ? base : `${base} (#${n})`, {
       text: section.body.trim(),
-      lineage: stack.map((h) => h.text),
+      level: heading.level,
       region: { region: 'section', name: heading.text },
     });
   }
@@ -5196,6 +5193,27 @@ function stateFieldOwnerUnit(units: Map<string, StateBodyUnit>, field: string): 
 }
 
 /**
+ * The units a declared section covers: the FIRST unit, in document order, whose
+ * heading text is the declared name (the occurrence `readStateTarget` reads,
+ * through `collectSection`'s first match), plus every following unit nested
+ * under it by heading level. The section analogue of `stateFieldOwnerUnit`: a
+ * repeated heading of the same name, and that occurrence's children, are not
+ * covered, even though they sit under a heading with the same text.
+ */
+function stateSectionScopeUnits(units: Map<string, StateBodyUnit>, sectionTargets: ReadonlySet<string>): Set<string> {
+  const covered = new Set<string>();
+  const entries = [...units];
+  for (const name of sectionTargets) {
+    const start = entries.findIndex(([, u]) => u.region.region === 'section' && u.region.name === name);
+    if (start < 0) continue;
+    const ownerLevel = entries[start][1].level;
+    covered.add(entries[start][0]);
+    for (let i = start + 1; i < entries.length && entries[i][1].level > ownerLevel; i++) covered.add(entries[i][0]);
+  }
+  return covered;
+}
+
+/**
  * ADR-4629 §8.2 + §8.3: verify one write against its declared intent. PURE —
  * it compares two document sides and never touches disk.
  *
@@ -5216,8 +5234,9 @@ function stateFieldOwnerUnit(units: Map<string, StateBodyUnit>, field: string): 
  *
  * §8.3 (bounded mutation): the delta must stay inside the declared scope.
  *  - Body: diffed per leaf unit (`collectStateBodyUnits`). A changed unit is in
- *    scope when a declared `target: 'section'` assertion names it or an
- *    enclosing section. Otherwise it is in scope only when replaying the
+ *    scope when it is the first occurrence of a section a declared
+ *    `target: 'section'` assertion names, or nested under that occurrence
+ *    (`stateSectionScopeUnits`). Otherwise it is in scope only when replaying the
  *    post-values of the declared fields THAT UNIT OWNS (`stateFieldOwnerUnit`)
  *    onto its pre text reproduces its post text, so any other edit in the same
  *    section, or the same label in another section, is caught. A change in
@@ -5337,12 +5356,16 @@ function verifyStateWriteIntent(
       const owner = stateFieldOwnerUnit(postUnits, field) ?? stateFieldOwnerUnit(preUnits, field);
       if (owner !== null) owners.set(owner, [...(owners.get(owner) ?? []), field]);
     }
+    const sectionScope = new Set([
+      ...stateSectionScopeUnits(preUnits, sectionTargets),
+      ...stateSectionScopeUnits(postUnits, sectionTargets),
+    ]);
     for (const key of new Set([...preUnits.keys(), ...postUnits.keys()])) {
       const before = preUnits.get(key);
       const after = postUnits.get(key);
       if (before !== undefined && after !== undefined && before.text === after.text) continue;
       const unit = (after ?? before) as StateBodyUnit;
-      if (unit.lineage.some((heading) => sectionTargets.has(heading))) continue;
+      if (sectionScope.has(key)) continue;
       if (before !== undefined && after !== undefined) {
         let replayed = before.text;
         for (const field of owners.get(key) ?? []) {
