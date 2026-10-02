@@ -603,6 +603,27 @@ export function createStateWriteIntent(
     err.code = 'STATE_WRITE_INTENT_TRANSACTION_REQUIRED';
     throw err;
   }
+  // C2 (ADR-4629 §8.2): an unknown `requirement` is a construction error. §8.2
+  // judges only `'required'` assertions, so a mistyped value (`'Required'`)
+  // would otherwise be silently skipped: a fail-open verifier.
+  for (const a of init.assertions ?? []) {
+    if (a.requirement !== 'required' && a.requirement !== 'best-effort') {
+      const err = new Error(
+        `createStateWriteIntent: assertion ${JSON.stringify(a.field)} has unknown requirement ` +
+        `${JSON.stringify(a.requirement)}; expected 'required' or 'best-effort' (ADR-4629 §8.1).`,
+      ) as Error & { code: string };
+      err.code = 'STATE_WRITE_INTENT_REQUIREMENT_INVALID';
+      throw err;
+    }
+  }
+  if (init.scope !== undefined && init.scope !== 'narrow' && init.scope !== 'broad') {
+    const err = new Error(
+      `createStateWriteIntent: unknown scope ${JSON.stringify(init.scope)}; expected 'narrow' or 'broad' ` +
+      '(ADR-4629 §8.1).',
+    ) as Error & { code: string };
+    err.code = 'STATE_WRITE_INTENT_SCOPE_INVALID';
+    throw err;
+  }
   // C2 (ADR-4629 §8.2): an unknown `target` is a construction error, never a
   // silent fall-back to field semantics (a JS caller passing `'sections'`).
   for (const a of init.assertions ?? []) {
