@@ -26,6 +26,13 @@ const HOOKS_DIR = path.join(REPO_ROOT, 'hooks');
 const NODE_CACHE_ENV_KEYS = ['NODE_COMPILE_CACHE', 'NODE_DISABLE_COMPILE_CACHE', 'NODE_V8_COVERAGE'];
 const PROBE_OUT_ENV = 'GSD_TEST_COMPILE_CACHE_PROBE_OUT';
 
+// Under V8 coverage (c8, `npm run test:coverage`) Node re-injects
+// NODE_V8_COVERAGE into every child even when the spawn env deletes it, so
+// each entry correctly skips the cache there and "cache written" cannot hold.
+// The coverage-guard row below still runs; the non-coverage lanes run this one.
+const UNDER_COVERAGE = Boolean(process.env.NODE_V8_COVERAGE)
+  && 'running under V8 coverage: Node forces NODE_V8_COVERAGE into every child, so the entry skips the cache by design';
+
 // Records Node's own view of the compile cache when the entry exits.
 const PROBE_SRC = `'use strict';
 const fs = require('node:fs');
@@ -129,7 +136,7 @@ function hasRegularFile(dir) {
 describe('#5183 compile cache at the gsd-tools entry and the bin/lib-loading hooks', () => {
   for (const entry of ENTRIES) {
     describe(entry.name, () => {
-      test('run as an entry: caches under <os temp>/node-compile-cache and does not export NODE_COMPILE_CACHE', () => {
+      test('run as an entry: caches under <os temp>/node-compile-cache and does not export NODE_COMPILE_CACHE', { skip: UNDER_COVERAGE }, () => {
         const { result, probe, box, tempDir } = runEntry(entry);
         try {
           assert.equal(result.exitCode, 0, result.stderr);
