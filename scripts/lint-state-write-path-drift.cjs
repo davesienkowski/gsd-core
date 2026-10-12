@@ -1033,6 +1033,11 @@ function resolvesToStatePath(ctx, index, cut, expr, hopsLeft = MAX_TARGET_RESOLU
  *     fs.writeFileSync(p, c); }`), or a reassignment in a closed block before
  *     the write on that line. Such a cut line is not read (`CUT_LINE_BODY_RE`).
  *   - A chain longer than `MAX_TARGET_RESOLUTION_HOPS` assignments.
+ *   - A declaration whose value starts on the next line (`const p =` or
+ *     `const p: string =`, then the value): the line holding `=` has no
+ *     right-hand side to read. And an annotation that `assignmentLineRe`
+ *     cannot read whole: braces nested past one level (`{ a: { b: string } }`)
+ *     or a `;` inside a string-literal type (`'a;b'`).
  *   - A `;` inside a template nested in another template's `${…}` in a
  *     right-hand side (`splitStatements` tracks one string level), and the
  *     write assigned to its own target (`p = fs.writeFileSync(p, c)`).
@@ -1052,12 +1057,16 @@ function resolvesToStatePath(ctx, index, cut, expr, hopsLeft = MAX_TARGET_RESOLU
  * Verified false positives, pinned the same way: a same-name parameter of an
  * arrow or nested function shadowing an outer STATE.md variable, a target
  * computed from the state file (`readTarget(path.join(d, 'STATE.md'))`), a
- * longer name such as `STATE.md.bak`, a never-reassigned `let` tail, and a
- * suffix after a join (`path.join(d, 'ROADMAP.md') + '.tmp'`). By design,
- * not a defect: where the written file is not visible (a parameter or
- * interpolated join tail, or a `const` tail separated from the write by a
- * body boundary), the whole-expression rule decides, so an unknown never
- * resolves to "not a STATE.md write".
+ * longer name such as `STATE.md.bak`, a never-reassigned `let` tail, a
+ * suffix after a join (`path.join(d, 'ROADMAP.md') + '.tmp'`), an arrow
+ * parameter on a prior line read as an assignment (`p => statePath` reads as
+ * `p = …`), and a sibling arrow body binding the same name. By design, not a
+ * defect: where the written file is not visible (a parameter or interpolated
+ * join tail, or a `const` tail separated from the write by a body boundary),
+ * the whole-expression rule decides, so an unknown never resolves to "not a
+ * STATE.md write". The boundary test is textual: any `{`, `}` or `=>` between
+ * the `const` and the write counts, so an unrelated closed block, an object
+ * literal, a callback or a `${…}` interpolation also stops the clear.
  */
 function findRawStateWrites(rel, rawText) {
   // CRLF: `assignmentLineRe`'s `(.*)$` cannot cross a trailing `\r` (`.` does

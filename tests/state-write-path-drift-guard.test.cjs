@@ -1201,6 +1201,19 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
       text: N("  const n = 'ROADMAP.md';", '  if (x) {', '    fs.writeFileSync(path.join(path.dirname(statePath), n), c);', '  }'),
       output: [4],
     },
+    // The boundary test is textual: an unrelated `{`, `}` or `=>` between a
+    // non-STATE const tail and the write also stops the clear, so the
+    // statePath-derived directory decides.
+    ...[
+      ['an unrelated closed block', '  if (x) { use(n); }'],
+      ['an object literal', "  const o = { flag: 'w' };"],
+      ['a callback', '  rest.forEach((r) => use(r));'],
+      ['a template interpolation', '  use(`${n}`);'],
+    ].map(([what, between]) => ({
+      shape: `non-STATE const tail separated from the write by ${what}`,
+      text: N('  const d = path.dirname(statePath);', "  const n = 'ROADMAP.md';", between, '  fs.writeFileSync(path.join(d, n), c);'),
+      output: [5],
+    })),
   ];
 
   for (const row of BY_DESIGN_FALLBACKS) {
@@ -1234,7 +1247,7 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
 
   test('rule: a cut line with a body opener, closer, arrow or function behaves as the previous lines alone', () => {
     // The same-line scan reads only plain statements (CUT_LINE_BODY_RE). Each
-    // row below gives the answer the pre-#5104-round scan gave, which read no
+    // row below gives the answer the scan before #5104 gave, which read no
     // part of the write's own line.
     const prior = "  const p = path.join(dir, 'notes.md');";
     assert.deepStrictEqual(lines(W(prior, "  if (c) { p = path.join(dir, 'STATE.md'); } fs.writeFileSync(p, c);")), []);
@@ -1298,6 +1311,35 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
       shape: 'parameter reassigned to statePath in a closed block before the write',
       text: ['function f(p, statePath, c) {', '  if (a) { p = statePath; } fs.writeFileSync(p, c);', '}'].join('\n'),
       expected: [2],
+      currentBuggyOutput: [],
+    },
+    {
+      // Missed write: the value starts on the line after `=`, so the line
+      // holding the declaration has no right-hand side to read.
+      shape: 'declaration whose STATE.md value starts on the next line',
+      text: W('  const p =', "    path.join(dir, 'STATE.md');", '  fs.writeFileSync(p, c);'),
+      expected: [4],
+      currentBuggyOutput: [],
+    },
+    {
+      // Missed write: the same with a type annotation.
+      shape: 'typed declaration whose STATE.md value starts on the next line',
+      text: W('  const p: string =', "    path.join(dir, 'STATE.md');", '  fs.writeFileSync(p, c);'),
+      expected: [4],
+      currentBuggyOutput: [],
+    },
+    {
+      // Missed write: the annotation's braces nest past the one level read.
+      shape: 'type annotation with nested object braces',
+      text: W("  const p: { a: { b: string } } | string = path.join(dir, 'STATE.md');", '  fs.writeFileSync(p, c);'),
+      expected: [3],
+      currentBuggyOutput: [],
+    },
+    {
+      // Missed write: a `;` inside a string-literal type ends the annotation.
+      shape: 'type annotation with a semicolon inside a string-literal type',
+      text: W("  const p: 'a;b' | string = path.join(dir, 'STATE.md');", '  fs.writeFileSync(p, c);'),
+      expected: [3],
       currentBuggyOutput: [],
     },
     {
