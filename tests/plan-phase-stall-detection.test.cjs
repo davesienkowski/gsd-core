@@ -1490,6 +1490,28 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     assert.deepEqual(treeOf(outside), before, 'nothing may be created outside the project');
   });
 
+  test('gsd_receipt_path refuses a phase dir with a .. component and creates nothing outside the project', (t) => {
+    // A `..` after a component that does not exist yet passes the ancestor check
+    // (the nearest existing ancestor is the project); mkdir -p would then resolve it
+    // and create the receipt directory outside. No symlink is involved.
+    const f = fixture(t);
+    const proj = path.join(f.dir, 'proj');
+    fs.mkdirSync(path.join(proj, '.planning'), { recursive: true });
+    let ran = 0;
+    for (const [phaseDir, escaped] of [
+      ['newdir/../../ESCAPED', 'ESCAPED'],
+      [`${fwd(proj)}/n2/../../ESC2`, 'ESC2'],
+      ['.planning/../../ESC3', 'ESC3'],
+    ]) {
+      const r = receiptPathFrom(f, proj, phaseDir);
+      assert.notEqual(r.status, 0, `${phaseDir}: a .. component must be refused`);
+      assert.equal(r.stdout, '', `${phaseDir}: a refused receipt prints no path`);
+      assert.equal(fs.existsSync(path.join(f.dir, escaped)), false, `${phaseDir}: nothing may be created outside the project`);
+      ran += 1;
+    }
+    assert.equal(ran, 3);
+  });
+
   test('gsd_receipt_path refuses a dangling .gsd-returns link and a dangling phase-dir link without creating either target', (t) => {
     const f = fixture(t);
     const outside = outsideDir(t);
