@@ -23,7 +23,8 @@ empty/truncated/unrecognized-return fallback remain unchanged.
 
 **Binding `{receipt}` (load-bearing, not optional; #5182):** every `gsd_stall_watch`
 call takes `{receipt}` as its second argument: a GSD-owned return receipt, one per
-dispatch. Before each watched Agent() call the orchestrator runs
+dispatch. Before each Agent() call that carries the receipt line, under either toggle,
+the orchestrator runs
 `gsd_receipt_path "${PHASE_DIR}" <spawn>` (`<spawn>` is `planner`, `checker`, `revision`,
 `outline`, or the plan ID) and substitutes the printed absolute path for `{receipt}`,
 both in the spawn prompt's `<return_receipt>{receipt}</return_receipt>` line and in
@@ -183,7 +184,9 @@ gsd_stall_should_recover() {
 # `pwd -P`): a checkout can commit the phase dir, `.planning` or `.gsd-returns` as
 # a symlink, and mkdir -p and the .gitignore write would follow it out of the
 # project. So a symlinked or dangling phase dir (or a missing component on the way
-# to it), a phase dir that resolves outside the root, and a symlinked .gsd-returns
+# to it), a phase dir with a `..` component (after a missing component it would
+# pass the ancestor check, and mkdir -p would then resolve it outside the project),
+# a phase dir that resolves outside the root, and a symlinked .gsd-returns
 # or .gitignore all disable the receipt; the watch then ends on the runtime's
 # completion result or as `stalled`. Both sides are compared after `cd -P`/`pwd -P`
 # (macOS temp dirs live under the /var -> /private/var link; Git Bash maps C:/ to
@@ -194,6 +197,9 @@ gsd_receipt_path() {
   local root a up phys rest got
   case "$dir" in
     ''|*[[:cntrl:]]*|*[\'\"\$\`\<\>]*) return 1 ;;
+  esac
+  case "/$dir/" in *[/\\]..[/\\]*) return 1 ;; esac
+  case "$dir" in
     /*|[A-Za-z]:[/\\]*) ;;
     *) dir="$(pwd)/$dir" ;;
   esac
