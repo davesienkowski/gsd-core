@@ -1588,6 +1588,36 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     assert.equal(ran, 3);
   });
 
+  // The rows above link outside the project, so the containment check alone refuses
+  // them. A link that stays inside the project is refused only by the walk's own
+  // link test: a phase dir that is itself a link, and a link among the components
+  // the walk visits (here one that points back at the project, followed by a missing
+  // child). An existing phase dir reached through a parent link that stays inside the
+  // project is accepted (only the walked components and physical containment are
+  // checked), and that row pins the scope of the claim.
+  test('gsd_receipt_path refuses an in-project link at the phase dir or on the walked path, and accepts an existing phase dir under an in-project parent link', (t) => {
+    const f = fixture(t);
+    const proj = path.join(f.dir, 'proj');
+    fs.mkdirSync(path.join(proj, '.planning', 'phases'), { recursive: true });
+    fs.mkdirSync(path.join(proj, 'inner', 'real'), { recursive: true });
+    if (!symlinkOrSkip(t, path.join(proj, 'inner', 'real'), path.join(proj, '.planning', 'phases', '01-link'), 'dir')) return;
+    if (!symlinkOrSkip(t, proj, path.join(proj, '.planning', 'up'), 'dir')) return;
+    if (!symlinkOrSkip(t, path.join(proj, 'inner'), path.join(proj, '.planning', 'lp'), 'dir')) return;
+    let ran = 0;
+    for (const phaseDir of ['.planning/phases/01-link', '.planning/up/NEWCHILD']) {
+      const r = receiptPathFrom(f, proj, phaseDir);
+      assert.notEqual(r.status, 0, `${phaseDir}: an in-project link at the phase dir or on the walked path must be refused`);
+      assert.equal(r.stdout, '', `${phaseDir}: a refused receipt prints no path`);
+      ran += 1;
+    }
+    assert.equal(ran, 2);
+    assert.equal(fs.existsSync(path.join(proj, 'inner', 'real', '.gsd-returns')), false, 'nothing is created through the phase-dir link');
+    assert.equal(fs.existsSync(path.join(proj, 'NEWCHILD')), false, 'nothing is created through the walked link');
+    const ok = receiptPathFrom(f, proj, '.planning/lp/real');
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.match(ok.stdout.trim(), /\/\.planning\/lp\/real\/\.gsd-returns\/checker\.\d+\.[A-Za-z0-9]+$/, 'an existing phase dir under an in-project parent link gets a receipt');
+  });
+
   test('gsd_receipt_path refuses a dangling .gsd-returns link and a dangling phase-dir link without creating either target', (t) => {
     const f = fixture(t);
     const outside = outsideDir(t);
