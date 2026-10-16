@@ -71,7 +71,10 @@
  *   module is always one `import` away — so this axis stays a plain
  *   string-match scan, unratcheted: any occurrence is a violation, because no
  *   legitimate call site in this codebase writes STATE.md this way (every
- *   real writer goes through `platformWriteSync`).
+ *   real writer goes through `platformWriteSync`). This axis's zero does NOT
+ *   prove that no raw STATE.md writer remains: it is a line scan, and
+ *   `findRawStateWrites`'s own header lists the verified shapes it misses
+ *   (ADR-3408 Decision 5; the syntax-tree follow-up is #5279).
  *
  *   AXIS 3 — FRONTMATTER-SHAPED WRITE (§8.3(b), closed Phase 2 / #3469).
  *   `findUnstrippedContentWrites` below flags a `stateReplaceField(` call
