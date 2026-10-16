@@ -1068,6 +1068,9 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     // redeclares the target as ROADMAP.md: out of scope at the write for
     // `const`/`let`, a possible reassignment for `var`. Either way the target
     // can still be the chain's value, so STATE.md must still report.
+    // Fail fast when the bound is not exported: an undefined `max` makes
+    // fc.integer generate without limit instead of failing.
+    assert.ok(Number.isInteger(MAX_TARGET_RESOLUTION_HOPS), 'MAX_TARGET_RESOLUTION_HOPS is exported');
     const fc = require('./helpers/fast-check-setup.cjs');
     const ident = fc.stringMatching(/^[a-z][a-zA-Z0-9]{0,7}$/).filter((s) => !RESERVED.has(s));
     const keyword = fc.constantFrom('const', 'let', 'var');
