@@ -752,6 +752,12 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.deepStrictEqual(lines(W(p, '  items.forEach((item) => {', '    fs.writeFileSync(p, item);', '  });')), [4]);
   });
 
+  test('guard: an assignment and write in a one-line block or arrow body, or a reassignment in a closed block, is reported', () => {
+    assert.deepStrictEqual(lines(W("  if (c) { const p = path.join(dir, 'STATE.md'); fs.writeFileSync(p, c); }")), [2]);
+    assert.deepStrictEqual(lines("const w = () => { const p = join(dir,'STATE.md'); fs.writeFileSync(p,c); };"), [1]);
+    assert.deepStrictEqual(lines(['function f(p, statePath, c) {', '  if (a) { p = statePath; } fs.writeFileSync(p, c);', '}'].join('\n')), [2]);
+  });
+
   test('bound: chains of MAX_TARGET_RESOLUTION_HOPS - 1 and exactly MAX lookups are reported, one more is not', () => {
     assert.ok(Number.isInteger(MAX_TARGET_RESOLUTION_HOPS) && MAX_TARGET_RESOLUTION_HOPS > 1);
     assert.strictEqual(findRawStateWrites(OTHER_FILE, chainFixture(MAX_TARGET_RESOLUTION_HOPS - 1)).length, 1);
@@ -948,6 +954,30 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
       text: W('  const target = statePath;', '  function inner(target) { fs.writeFileSync(target, c); }'),
       expected: [],
       currentBuggyOutput: [3],
+    },
+    {
+      // False positive: a named-function header on the write's line is dropped,
+      // so a top-level one-line function's parameter resolves to an earlier
+      // function's variable.
+      shape: "one-line top-level function's parameter resolved into an earlier function",
+      text: ['function other(dir) {', "  const p = path.join(dir, 'STATE.md');", '  return p;', '}', 'function w(p, c) { fs.writeFileSync(p, c); }'].join('\n'),
+      expected: [],
+      currentBuggyOutput: [5],
+    },
+    {
+      // False positive: `x =>` reads as an assignment `x = >…`; past its `{` the
+      // search goes on to the outer `let x`.
+      shape: 'bare arrow parameter shadowing an outer statePath variable',
+      text: W('  let x = statePath;', '  const save = x => {', '    fs.writeFileSync(x, c);', '  };'),
+      expected: [],
+      currentBuggyOutput: [4],
+    },
+    {
+      // False positive: a `for` header's loop-scoped `let` earlier on the write's line is read.
+      shape: "for header's loop-scoped let earlier on the write's line",
+      text: W('  for (let p = statePath; i < 0; i++) n++; fs.writeFileSync(p, c);'),
+      expected: [],
+      currentBuggyOutput: [2],
     },
     {
       // False positive: a block-scoped binding earlier on the write's line is read.
