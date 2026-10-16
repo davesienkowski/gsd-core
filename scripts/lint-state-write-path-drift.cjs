@@ -763,7 +763,9 @@ function resolvesToStatePath(scanLines, index, expr, hopsLeft = MAX_TARGET_RESOL
  * directory joined with another file name (`path.join(path.dirname(
  * statePath), 'ROADMAP.md')`, inline or through a variable), a same-name
  * parameter of an arrow or one-line nested function shadowing an outer
- * STATE.md variable, a block-scoped binding earlier on the write's line
+ * STATE.md variable, a one-line top-level function's parameter resolved
+ * into an earlier function (its header is dropped, see above), a
+ * block-scoped binding or `for` header's `let` earlier on the write's line
  * (`if (a) { const p = statePath; } else { fs.writeFileSync(p, c); }`), a target
  * computed from the state file, a longer name such as `STATE.md.bak`, a
  * right-hand side that runs past its own `;` into a later statement on that
