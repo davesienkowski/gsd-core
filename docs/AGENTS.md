@@ -882,7 +882,7 @@ Thirteen additional agents ship under `agents/gsd-*.md` and are used by specialt
 | security-auditor | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | | |
 
 **Principle of Least Privilege:**
-- Checkers never modify what they check (no Edit); plan-checker's one Write is its stall-watch return receipt (#5182)
+- Checkers never modify what they check (no Edit); plan-checker's one Write is its stall-watch return receipt (#5182). On OpenCode and Kilo, Write/Edit/MultiEdit collapse to one `edit` permission, so that grant is full edit there (as for the other #767 Group B agents)
 - Researchers have web access — they need current ecosystem information
 - Executors have Edit — they modify code but not web access
 - Mappers have Write — they write analysis documents but not Edit (no code changes)
