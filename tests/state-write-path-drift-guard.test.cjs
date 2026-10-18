@@ -765,6 +765,31 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.strictEqual(findRawStateWrites(OTHER_FILE, chainFixture(MAX_TARGET_RESOLUTION_HOPS + 1)).length, 0);
   });
 
+  // Work bound (#5119 review 5558390402, Minor 1). Source files are untrusted
+  // input to lint:ci, and every hop branches over each name a right-hand side
+  // reads. Counted, not timed: `stats.assignmentLookups` is the number of
+  // nearestPrecedingAssignment calls. Memoized per write on (name, line,
+  // hops left), each of the N names is looked up from at most N + 1 lines at
+  // each of MAX_TARGET_RESOLUTION_HOPS depths, and with one assignment per
+  // name each lookup ends within 2 calls. Measured at N = 20 when this row
+  // was added (at MAX_TARGET_RESOLUTION_HOPS = 4): 33215 calls without the
+  // memo, 1694 with it, bound 3360. This row bounds lookups per write only:
+  // it does not bound the number of writes in a file or the cost of one
+  // lookup.
+  test('bound: right-hand sides that each read every name cost a polynomial number of assignment lookups', () => {
+    const N = 20;
+    const sum = Array.from({ length: N }, (_, k) => `v${k}`).join(' + ');
+    const body = [];
+    for (let k = 0; k < N; k++) body.push(`  let v${k} = ${sum};`, '  { }');
+    body.push(`  fs.writeFileSync(${sum}, c);`);
+    const stats = {};
+    const out = findRawStateWrites(OTHER_FILE, W(...body), stats);
+    assert.strictEqual(typeof stats.assignmentLookups, 'number', 'findRawStateWrites reports assignmentLookups');
+    assert.ok(stats.assignmentLookups > 0, 'the seam counts lookups');
+    assert.ok(stats.assignmentLookups <= 2 * N * (N + 1) * MAX_TARGET_RESOLUTION_HOPS, `${stats.assignmentLookups} lookups`);
+    assert.deepStrictEqual(out, []);
+  });
+
   test('control: a variable assigned from a non-STATE.md literal, or a loop over an unrelated list, is NOT reported', () => {
     assert.deepStrictEqual(lines(W("  const p = path.join(dir, 'ROADMAP.md');", '  fs.writeFileSync(p, c);')), []);
     assert.deepStrictEqual(lines(W('  for (const f of files) {', '    fs.writeFileSync(f, c);', '  }')), []);

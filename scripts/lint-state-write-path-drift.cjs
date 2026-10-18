@@ -661,6 +661,9 @@ function targetsStatePath(arg) {
 // How many assignments Axis 2 follows back from a raw write's target before
 // giving up (#5104). Each hop resumes above the assignment it followed, so the
 // scan always terminates; the bound keeps it a string match, not dataflow.
+// Termination alone does not bound the work: every hop branches over each
+// identifier of a right-hand side, so `resolvesToStatePath` memoizes each
+// name's lookup per write (see there).
 const MAX_TARGET_RESOLUTION_HOPS = 4;
 
 // How Axis 2 reads an assignment through `nearestPrecedingAssignment` (#5104).
@@ -706,21 +709,49 @@ const BODY_BOUNDARY_RE = /[{}]|=>/;
  * the search goes on to the next earlier assignment of that name. This can
  * only add reports: an assignment that reaches the state path reports at
  * once.
+ *
+ * `ctx` is one write's resolution state, made fresh per write by
+ * `findRawStateWrites` (its last scan line differs per write) and never kept
+ * in module state: `ctx.memo` maps `name`, `index` and `hopsLeft` to that
+ * name's verdict, and `ctx.assignmentLookups` counts the
+ * `nearestPrecedingAssignment` calls. The verdict depends only on those three
+ * and `scanLines`, so the memo changes no verdict. It bounds the lookups per
+ * write to names x lines x `MAX_TARGET_RESOLUTION_HOPS` x (assignments per
+ * name + 1); without it, right-hand sides that each read many names branch
+ * exponentially in the hop bound.
+ *
+ * Scope of the bound: per write only. The memo is rebuilt for each write, so
+ * the cost of a file still grows with its number of writes, and each lookup
+ * is a line scan whose assignment regex can backtrack on a long run of
+ * whitespace. Neither is bounded here.
  */
-function resolvesToStatePath(scanLines, index, expr, hopsLeft = MAX_TARGET_RESOLUTION_HOPS) {
+function resolvesToStatePath(scanLines, index, expr, hopsLeft, ctx) {
   if (targetsStatePath(expr)) return true;
   if (hopsLeft === 0) return false;
-  for (const name of identifiersIn(expr)) {
-    for (let from = index; from >= 0; ) {
-      const found = nearestPrecedingAssignment(scanLines, from, name, RAW_WRITE_ASSIGNMENT_OPTIONS);
-      if (found === null) break;
-      if (resolvesToStatePath(scanLines, found.line - 1, found.rhs, hopsLeft - 1)) return true;
-      const between = [found.rhs, ...scanLines.slice(found.line + 1)].join('\n');
-      if (!BODY_BOUNDARY_RE.test(between)) break;
-      from = found.line - 1;
+  return identifiersIn(expr).some((name) => nameResolvesToStatePath(scanLines, index, name, hopsLeft, ctx));
+}
+
+// One identifier's part of `resolvesToStatePath`: its assignments, nearest
+// first, memoized in `ctx.memo`.
+function nameResolvesToStatePath(scanLines, index, name, hopsLeft, ctx) {
+  const key = `${name}\0${index}\0${hopsLeft}`;
+  const known = ctx.memo.get(key);
+  if (known !== undefined) return known;
+  let verdict = false;
+  for (let from = index; from >= 0; ) {
+    ctx.assignmentLookups++;
+    const found = nearestPrecedingAssignment(scanLines, from, name, RAW_WRITE_ASSIGNMENT_OPTIONS);
+    if (found === null) break;
+    if (resolvesToStatePath(scanLines, found.line - 1, found.rhs, hopsLeft - 1, ctx)) {
+      verdict = true;
+      break;
     }
+    const between = [found.rhs, ...scanLines.slice(found.line + 1)].join('\n');
+    if (!BODY_BOUNDARY_RE.test(between)) break;
+    from = found.line - 1;
   }
-  return false;
+  ctx.memo.set(key, verdict);
+  return verdict;
 }
 
 /**
@@ -770,8 +801,15 @@ function resolvesToStatePath(scanLines, index, expr, hopsLeft = MAX_TARGET_RESOL
  * computed from the state file, a longer name such as `STATE.md.bak`, a
  * right-hand side that runs past its own `;` into a later statement on that
  * line, and a string that spells the call.
+ *
+ * `stats`, optional, receives `assignmentLookups`: how many
+ * `nearestPrecedingAssignment` calls target resolution made over every write
+ * in `text`. A test seam that bounds the work without a clock; `collect`
+ * passes none. The count is overwritten on each call, not accumulated across
+ * calls, and `stats` must be an object (or omitted): `null` throws.
  */
-function findRawStateWrites(rel, text) {
+function findRawStateWrites(rel, text, stats = {}) {
+  stats.assignmentLookups = 0;
   const rawLines = text.split('\n');
   const stripped = stripComments(text);
   const joined = stripped.join('\n');
@@ -790,7 +828,10 @@ function findRawStateWrites(rel, text) {
     const scanLines = stripped.slice(0, lineIdx + 1);
     const cut = joined.slice(joined.lastIndexOf('\n', m.index - 1) + 1, m.index);
     scanLines[lineIdx] = FUNCTION_DECL_LINE_RE.test(cut) ? '' : cut;
-    if (!resolvesToStatePath(scanLines, lineIdx, targetArg)) continue;
+    const ctx = { memo: new Map(), assignmentLookups: 0 };
+    const hit = resolvesToStatePath(scanLines, lineIdx, targetArg, MAX_TARGET_RESOLUTION_HOPS, ctx);
+    stats.assignmentLookups += ctx.assignmentLookups;
+    if (!hit) continue;
     // `file`/`source` sanitized for the same fork-PR reason as every other
     // finding in this guard.
     out.push({
