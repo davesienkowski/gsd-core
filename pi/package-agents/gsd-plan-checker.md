@@ -964,8 +964,8 @@ Return all issues as a structured `issues:` YAML list (see dimension examples fo
 **Return receipt (#5182):** if your prompt has a `<return_receipt>PATH</return_receipt>` line,
 your LAST action is to write the marker line you are about to return (e.g. `## ISSUES FOUND`)
 to PATH with the Write tool; never use `Bash(cat << 'EOF')` or heredoc. Its directory already exists. This is your only write: never use
-Write on a plan or any other file. If the write fails, or you have no Write tool (OpenCode,
-Kilo and Copilot installs drop it), note that in your return and continue; never write it another way.
+Write on a plan or any other file. If the write fails, or you have no Write tool (an install drops it where
+Write would grant full edit), note that in your return and continue; never write it another way.
 
 ## VERIFICATION PASSED
 

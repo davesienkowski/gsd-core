@@ -380,19 +380,40 @@ test('a Write the user grants the plan-checker in agent_tools is kept on a mergi
     'a configured grant is appended after the receipt-only scoping, so it survives');
 });
 
+// The runtime -> map table must agree with what each host's real agent converter emits,
+// so a host added later whose converter merges Write into edit cannot slip past the
+// table: a converter merges them iff `Read, Write` and `Read, Edit` convert identically
+// while differing from `Read` alone (a converter that emits no tool restriction at all
+// leaves every tool granted either way and has nothing to scope).
 test('exactly the hosts whose agent converter merges Write into edit drop the receipt Write (#5182)', () => {
   const conversion = require('../gsd-core/bin/lib/runtime-artifact-conversion.cjs');
   const capabilitiesDir = path.join(REPO_ROOT, 'capabilities');
-  const merging = [];
-  let runtimes = 0;
+  const agent = (tools) => `---\nname: gsd-probe\ndescription: d\ntools: ${tools}\n---\n\nBody.\n`;
+  const table = [];
+  const observed = [];
+  let converters = 0;
   for (const name of fs.readdirSync(capabilitiesDir).sort()) {
     const file = path.join(capabilitiesDir, name, 'capability.json');
     if (!fs.existsSync(file)) continue;
-    runtimes += 1;
-    if (conversion.hostMergesWriteIntoEdit(name)) merging.push(name);
+    if (conversion.hostMergesWriteIntoEdit(name)) table.push(name);
+    const names = new Set();
+    (function walk(node) {
+      if (!node || typeof node !== 'object') return;
+      if (node.kind === 'agents' && typeof node.converter === 'string') names.add(node.converter);
+      for (const key of Object.keys(node)) walk(node[key]);
+    })(JSON.parse(fs.readFileSync(file, 'utf8')));
+    for (const converterName of names) {
+      const convert = conversion[converterName];
+      assert.equal(typeof convert, 'function', `${name}: descriptor converter ${converterName} is exported`);
+      const run = (tools) => (/Frontmatter$/.test(converterName) ? convert(agent(tools), { isAgent: true }) : convert(agent(tools), false));
+      const write = run('Read, Write');
+      converters += 1;
+      if (write === run('Read, Edit') && write !== run('Read')) observed.push(name);
+    }
   }
-  assert.ok(runtimes > 20, 'the capability registry was read');
-  assert.deepStrictEqual(merging, ['copilot', 'kilo', 'opencode']);
+  assert.ok(converters > 10, `the descriptor agent converters were exercised (${converters})`);
+  assert.deepStrictEqual(table, observed, 'the scoping table names exactly the hosts whose converter merges Write into edit');
+  assert.deepStrictEqual(table, ['copilot', 'kilo', 'opencode']);
   assert.equal(conversion.hostMergesWriteIntoEdit('__proto__'), false);
   assert.equal(conversion.hostMergesWriteIntoEdit('constructor'), false);
   assert.deepStrictEqual([...conversion.RECEIPT_ONLY_WRITE_AGENTS], ['gsd-plan-checker']);
