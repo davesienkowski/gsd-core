@@ -356,17 +356,22 @@ function checkerEditPosture(runtime, artifact) {
 }
 
 test('the plan-checker receipt Write is dropped where the host merges Write into edit (#5182)', (t) => {
+  let ran = 0;
   for (const runtime of ['opencode', 'kilo', 'copilot']) {
-    const artifacts = emittedAgentArtifacts(installRuntime(t, runtime), 'gsd-plan-checker');
-    assert.ok(artifacts.every((artifact) => checkerEditPosture(runtime, artifact) === 'deny'),
-      `${runtime}: the checker must not hold edit`);
+    for (const scope of ['local', 'global']) {
+      const install = installRuntime(t, runtime, { scope });
+      // The host's own agents/ directory: a global install also ships the raw source
+      // agents under <config>/gsd-core/agents/, which no host loads as an agent definition.
+      const hostAgents = path.join(install.configDir, 'agents');
+      assert.ok(emittedAgentArtifacts(install, 'gsd-plan-checker', hostAgents).every((artifact) => checkerEditPosture(runtime, artifact) === 'deny'),
+        `${runtime} (${scope}): the checker must not hold edit`);
+      // Control: the same install still grants edit to an agent that declares Write.
+      assert.ok(emittedAgentArtifacts(install, 'gsd-verifier', hostAgents).some((artifact) => checkerEditPosture(runtime, artifact) === 'allow'),
+        `${runtime} (${scope}): control, gsd-verifier declares Write and keeps edit`);
+      ran += 1;
+    }
   }
-  // Control: the same pipeline still grants edit to an agent that declares Write.
-  for (const runtime of ['opencode', 'kilo', 'copilot']) {
-    const artifacts = emittedAgentArtifacts(installRuntime(t, runtime), 'gsd-verifier');
-    assert.ok(artifacts.some((artifact) => checkerEditPosture(runtime, artifact) === 'allow'),
-      `${runtime}: control, gsd-verifier declares Write and keeps edit`);
-  }
+  assert.equal(ran, 6);
   // Hosts with a separate write tool keep the receipt Write.
   const claude = installClaude(t).agent('gsd-plan-checker');
   assert.ok(parseTools(claude).includes('Write'), 'claude: the checker keeps Write');

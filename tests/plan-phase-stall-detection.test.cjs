@@ -1412,10 +1412,9 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
 
   // A hostile checkout can commit <phase>/.gsd-returns (or its .gitignore) as a
   // symlink; mkdir -p and the .gitignore printf would follow it out of the phase.
-  // A skip is allowed only off CI: every CI runner, Windows included, creates these
-  // links (the Windows shards ran every symlink row of this file without a skip at
-  // 35bf07e37), so in CI a refused link fails the row instead of passing it with
-  // zero assertions.
+  // A skip is allowed only off CI: the CI runners create these links (at 35bf07e37 the
+  // Windows shard that ran this file ran every symlink row without a skip), so in CI a
+  // refused link fails the row instead of passing it with zero assertions.
   function symlinkOrSkip(t, target, link, type) {
     try {
       fs.symlinkSync(target, link, type === 'dir' && process.platform === 'win32' ? 'junction' : type);
