@@ -62,7 +62,10 @@ never counted as 0 issues; use 11a and offer Retry checker before Accept. A plan
 `## CHECKPOINT REACHED`, `## PHASE SPLIT RECOMMENDED` or `## ⚠ Source Audit` whose body
 (the question, the proposed split, the gap list) has not arrived by the next cycle
 never routes to an empty checkpoint, 9b or 9c: use 9a, name the marker received, and
-offer Retry planner before Accept.
+offer Retry planner before Accept. A revision `## REVISION_CONFLICT` whose body (the
+`CONFLICT_*` fields step 12 records) has not arrived by the next cycle never writes an
+empty conflict record: use that watch's `stalled` menu, name the marker received, and
+offer Retry before Accept.
 
 The helper functions and the config values above do not persist between tool calls
 either: re-run this block in every fence that calls them.

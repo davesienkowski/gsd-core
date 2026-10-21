@@ -1479,6 +1479,25 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     assert.match(step11, /## ISSUES FOUND[^\n]*11a/, 'a missing issue list routes to 11a, never to a zero count');
   });
 
+  // Review 5563209291 Minor 2: step 12 reads the conflict record's fields (CONFLICT_*) from
+  // the revision's return body, which a receipt never carries, so a receipt-only
+  // ## REVISION_CONFLICT must sit in the fail-closed list beside the other body-needing routes.
+  test('a receipt-routed ## REVISION_CONFLICT with no body fails closed (never an empty conflict record)', () => {
+    const revisionSection = sectionOf(readPlanPhase(), REVISION_SECTION);
+    assert.ok(watchCallOf(revisionSection).markers.includes('## REVISION_CONFLICT'), 'the revision watch passes the conflict marker');
+    assert.match(revisionSection, /CONFLICT_DIMENSION/, 'control: step 12 reads conflict fields from the return body');
+    const doc = readStallHelpersDoc();
+    const at = doc.indexOf('fails closed:');
+    assert.notEqual(at, -1);
+    const failClosed = doc.slice(at, doc.indexOf('\n\n', at));
+    let ran = 0;
+    for (const marker of ['## ISSUES FOUND', '## CHECKPOINT REACHED', '## PHASE SPLIT RECOMMENDED', '## ⚠ Source Audit', '## REVISION_CONFLICT']) {
+      assert.ok(failClosed.includes(`\`${marker}\``), `${marker} is in the fail-closed list`);
+      ran += 1;
+    }
+    assert.equal(ran, 5);
+  });
+
   test('both agent definitions carry the receipt rule; the checker writes it with Write, its only write', () => {
     const planner = readFileNormalized(path.join(REPO_ROOT, 'agents', 'gsd-planner.md'));
     const checker = readFileNormalized(path.join(REPO_ROOT, 'agents', 'gsd-plan-checker.md'));
