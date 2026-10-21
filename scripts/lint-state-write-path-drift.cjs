@@ -521,26 +521,79 @@ function isQuotedLiteralArg(arg) {
  *     in a sibling block.
  *   - `withLine`: return `{ rhs, line }` instead of the bare text, so a
  *     caller can resume its scan above the assignment it followed.
+ *   - `firstLine`: read this text in place of `lines[index]`. Axis 2 passes
+ *     the write's own line cut at the call.
+ *   - `cache`: a `{ byName, linesRead }` object shared by every call over the
+ *     same `lines` with the same options. Each line is then read at most once
+ *     per name: a scan stops at the first line whose result is cached, and
+ *     records its result for every line it read. `firstLine` is never cached.
+ *     `linesRead` counts the lines read.
  */
 function nearestPrecedingAssignment(lines, index, varName, options = {}) {
-  const name = escapeRegex(varName);
-  const target = options.typed ? `(?:(?:const|let|var)\\s+${name}\\s*:[^=;]+?|(?:const|let|var)?\\s*${name})` : `(?:const|let|var)?\\s*${name}`;
-  const assignRe = new RegExp(`(?:^|[^.\\w$])${target}\\s*=\\s*([^=].*)$`);
-  for (let i = index; i >= 0; i--) {
-    if (FUNCTION_DECL_LINE_RE.test(lines[i])) return null;
-    if (!lines[i].includes(varName)) continue; // a line without the name cannot bind it
-    if (options.stopAtPatternBinding && bindsByPattern(lines[i], varName)) return null;
-    const m = assignRe.exec(lines[i]);
-    if (m) return options.withLine ? { rhs: m[1].trim(), line: i } : m[1].trim();
+  const assignRe = assignmentRegex(varName, options.typed);
+  const cache = options.cache;
+  let known = null;
+  if (cache) {
+    known = cache.byName.get(varName);
+    if (!known) cache.byName.set(varName, (known = []));
   }
-  return null;
+  const own = options.firstLine !== undefined;
+  let result = null;
+  let i = index;
+  for (; i >= 0; i--) {
+    if (known && known[i] !== undefined && !(own && i === index)) {
+      result = known[i];
+      break;
+    }
+    if (cache) cache.linesRead++;
+    const line = own && i === index ? options.firstLine : lines[i];
+    if (FUNCTION_DECL_LINE_RE.test(line)) break;
+    if (!line.includes(varName)) continue; // a line without the name cannot bind it
+    if (options.stopAtPatternBinding && bindsByPattern(line, varName)) break;
+    const m = assignRe.exec(line);
+    if (m) {
+      result = options.withLine ? { rhs: m[1].trim(), line: i } : m[1].trim();
+      break;
+    }
+  }
+  if (known) for (let j = Math.max(i, 0); j <= (own ? index - 1 : index); j++) known[j] = result;
+  return result;
+}
+
+/**
+ * The assignment regex `nearestPrecedingAssignment` matches a line with. Its
+ * language is `(?:^|[^.\w$])T\s*=\s*([^=].*)$`, where `T` is
+ * `(?:const|let|var)?\s*NAME` or, when `typed`, also
+ * `(?:const|let|var)\s+NAME\s*:[^=;]+?`. Matched in that form, every position
+ * in a long run of whitespace can start a match and backtrack over the rest
+ * of the run, so one line costs time quadratic in the run. Here each match
+ * starts at the name and a lookbehind reads the text before it, so a line
+ * costs time linear in its length. The language and the captured right-hand
+ * side are unchanged (`[^=;]+?\s*=` is `[^=;]+=`, because `[^=;]` already
+ * holds whitespace).
+ */
+function assignmentRegex(varName, typed) {
+  const name = escapeRegex(varName);
+  const lead = '(?:^|[^.\\w$])';
+  const typedForm = typed ? `(?<=${lead}(?:const|let|var)\\s+${name})\\s*:[^=;]+=|` : '';
+  return new RegExp(`${name}(?:${typedForm}(?<=${lead}(?:const|let|var)?\\s*${name})\\s*=)\\s*([^=].*)$`);
 }
 
 // A `for (const|let|var <pattern> of …)` loop header, or a `const|let|var`
 // destructuring declaration: each binds a name WITHOUT a `name =` that
 // `nearestPrecedingAssignment` can see.
-const LOOP_BINDING_RE = /\bfor\s*(?:await\s*)?\(\s*(?:const|let|var)\s+(.+?)\s+of\b/;
-const DESTRUCTURING_BINDING_RE = /\b(?:const|let|var)\s+([[{].*?[\]}])\s*=/;
+//
+// The loop header's pattern was read as `\s+(.+?)\s+of\b`. On a long run of
+// whitespace every position of that run tried `\s+of` to its end, and a failed
+// match also backtracked the `\s+` after the keyword, so one line cost time
+// quadratic in the run. `(.*?\S)` can only end before a run, and the
+// lookahead-and-backreference takes the keyword's whitespace whole (JavaScript
+// has no possessive quantifier), so the read is linear in the line. The verdict
+// is unchanged: the pattern read is the same whenever a header matches, and a
+// match the old form found only by backtracking read whitespace alone, which
+// binds no name.
+const LOOP_BINDING_RE = /\bfor\s*(?:await\s*)?\(\s*(?:const|let|var)(?=(\s+))\1(?<pattern>.*?\S)\s+of\b/;
+const DESTRUCTURING_BINDING_RE = /\b(?:const|let|var)\s+(?<pattern>[[{].*?[\]}])\s*=/;
 
 /**
  * True when `line` binds `name` through a `for...of` loop header or a
@@ -549,7 +602,7 @@ const DESTRUCTURING_BINDING_RE = /\b(?:const|let|var)\s+([[{].*?[\]}])\s*=/;
 function bindsByPattern(line, name) {
   return [LOOP_BINDING_RE, DESTRUCTURING_BINDING_RE].some((re) => {
     const m = re.exec(line);
-    return m !== null && new RegExp(`(?<![\\w$.])${escapeRegex(name)}(?![\\w$])(?!\\s*:)`).test(m[1]);
+    return m !== null && new RegExp(`(?<![\\w$.])${escapeRegex(name)}(?![\\w$])(?!\\s*:)`).test(m.groups.pattern);
   });
 }
 
@@ -663,7 +716,7 @@ function targetsStatePath(arg) {
 // scan always terminates; the bound keeps it a string match, not dataflow.
 // Termination alone does not bound the work: every hop branches over each
 // identifier of a right-hand side, so `resolvesToStatePath` memoizes each
-// name's lookup per write (see there).
+// name's verdict (see there).
 const MAX_TARGET_RESOLUTION_HOPS = 4;
 
 // How Axis 2 reads an assignment through `nearestPrecedingAssignment` (#5104).
@@ -687,17 +740,42 @@ function identifiersIn(expr) {
 const BODY_BOUNDARY_RE = /[{}]|=>/;
 
 /**
- * True when `expr`, the target of the raw write at the end of `scanLines`,
- * names the state path (`targetsStatePath`), or when one of its identifiers
- * resolves to an expression that does, following at most `hopsLeft`
- * same-function assignments through `nearestPrecedingAssignment` (#5104).
+ * True when `expr`, the target of the raw write `write`, names the state path
+ * (`targetsStatePath`), or when one of its identifiers resolves to an
+ * expression that does, following at most `hopsLeft` same-function
+ * assignments through `nearestPrecedingAssignment` (#5104).
  *
- * `scanLines` is the comment-stripped file from its first line through the
- * write's line, and its last entry is that line cut at the
- * `fs.writeFileSync(` call: an assignment earlier on the write's line is
- * read, one after the call is not. `index` is the last line an assignment
- * may sit on; each hop resumes on the line above the assignment it followed,
- * so `p = p + '.tmp'` reaches the earlier assignment of `p`.
+ * `write` is made by `findRawStateWrites`, one per write, and never kept in
+ * module state:
+ *   - `lines` is the comment-stripped file and `line` the write's line.
+ *     `ownLine` is that line cut at the `fs.writeFileSync(` call, so an
+ *     assignment earlier on the write's line is read and one after the call
+ *     is not (it is empty when the cut holds a named-function header, which
+ *     then does not end the scan). `index` is the last line an assignment may
+ *     sit on; each hop resumes on the line above the assignment it followed,
+ *     so `p = p + '.tmp'` reaches the earlier assignment of `p`.
+ *   - `bindings` is the file's assignment cache, one object shared by every
+ *     write in the file (`nearestPrecedingAssignment`'s `cache`). A line
+ *     above the write's own is the same text for every write, so each line
+ *     is read at most once per name in the file; the write's own line is read
+ *     per write.
+ *   - `boundaryLinesBefore[i]` counts the lines among `lines[0..i-1]` that
+ *     hold a body boundary (`BODY_BOUNDARY_RE`), so the boundary rule below
+ *     reads no line range per write.
+ *   - A name's verdict is memoized on `name`, `index` and `hopsLeft`.
+ *     Below the write's line it depends on the write only through whether a
+ *     body boundary lies after `index`, up to the call
+ *     (`boundaryAfterLine`): the lines it reads are the same for every write,
+ *     and each hop's boundary flag follows from that one and the lines
+ *     between. So those verdicts are kept in `verdicts`, shared by every
+ *     write in the file and keyed on that flag too. A verdict from the
+ *     write's own line goes in `memo`, kept for this write only. Neither
+ *     changes a verdict. Together they bound the lookups per write to names
+ *     x lines x `MAX_TARGET_RESOLUTION_HOPS` x (assignments per name + 1),
+ *     and the lookups below the write's line are shared; without them,
+ *     right-hand sides that each read many names branch exponentially in the
+ *     hop bound. `assignmentLookups` counts the `nearestPrecedingAssignment`
+ *     calls.
  *
  * Unresolved is not flagged: a parameter, a name bound by a `for...of`
  * header or a destructuring declaration, or a chain longer than the bound.
@@ -709,49 +787,52 @@ const BODY_BOUNDARY_RE = /[{}]|=>/;
  * the search goes on to the next earlier assignment of that name. This can
  * only add reports: an assignment that reaches the state path reports at
  * once.
- *
- * `ctx` is one write's resolution state, made fresh per write by
- * `findRawStateWrites` (its last scan line differs per write) and never kept
- * in module state: `ctx.memo` maps `name`, `index` and `hopsLeft` to that
- * name's verdict, and `ctx.assignmentLookups` counts the
- * `nearestPrecedingAssignment` calls. The verdict depends only on those three
- * and `scanLines`, so the memo changes no verdict. It bounds the lookups per
- * write to names x lines x `MAX_TARGET_RESOLUTION_HOPS` x (assignments per
- * name + 1); without it, right-hand sides that each read many names branch
- * exponentially in the hop bound.
- *
- * Scope of the bound: per write only. The memo is rebuilt for each write, so
- * the cost of a file still grows with its number of writes, and each lookup
- * is a line scan whose assignment regex can backtrack on a long run of
- * whitespace. Neither is bounded here.
  */
-function resolvesToStatePath(scanLines, index, expr, hopsLeft, ctx) {
+function resolvesToStatePath(write, index, expr, hopsLeft) {
   if (targetsStatePath(expr)) return true;
   if (hopsLeft === 0) return false;
-  return identifiersIn(expr).some((name) => nameResolvesToStatePath(scanLines, index, name, hopsLeft, ctx));
+  return identifiersIn(expr).some((name) => nameResolvesToStatePath(write, index, name, hopsLeft));
 }
 
 // One identifier's part of `resolvesToStatePath`: its assignments, nearest
-// first, memoized in `ctx.memo`.
-function nameResolvesToStatePath(scanLines, index, name, hopsLeft, ctx) {
-  const key = `${name}\0${index}\0${hopsLeft}`;
-  const known = ctx.memo.get(key);
+// first, memoized in `write.memo`.
+function nameResolvesToStatePath(write, index, name, hopsLeft) {
+  const below = index < write.line;
+  const memo = below ? write.verdicts : write.memo;
+  const key = below ? `${name}\0${index}\0${hopsLeft}\0${boundaryAfterLine(write, index)}` : `${name}\0${index}\0${hopsLeft}`;
+  const known = memo.get(key);
   if (known !== undefined) return known;
   let verdict = false;
   for (let from = index; from >= 0; ) {
-    ctx.assignmentLookups++;
-    const found = nearestPrecedingAssignment(scanLines, from, name, RAW_WRITE_ASSIGNMENT_OPTIONS);
+    write.assignmentLookups++;
+    const found = nearestPrecedingAssignment(write.lines, from, name, {
+      ...RAW_WRITE_ASSIGNMENT_OPTIONS,
+      cache: write.bindings,
+      firstLine: from === write.line ? write.ownLine : undefined,
+    });
     if (found === null) break;
-    if (resolvesToStatePath(scanLines, found.line - 1, found.rhs, hopsLeft - 1, ctx)) {
+    if (resolvesToStatePath(write, found.line - 1, found.rhs, hopsLeft - 1)) {
       verdict = true;
       break;
     }
-    const between = [found.rhs, ...scanLines.slice(found.line + 1)].join('\n');
-    if (!BODY_BOUNDARY_RE.test(between)) break;
+    if (!bodyBoundaryAfter(write, found)) break;
     from = found.line - 1;
   }
-  ctx.memo.set(key, verdict);
+  memo.set(key, verdict);
   return verdict;
+}
+
+// True when a body boundary lies between the assignment `found` (its
+// right-hand side, then every line after it) and the write's call.
+function bodyBoundaryAfter(write, found) {
+  if (BODY_BOUNDARY_RE.test(found.rhs)) return true;
+  return found.line < write.line && boundaryAfterLine(write, found.line);
+}
+
+// True when a body boundary lies on a line after `index` (below the write's
+// line), up to the write's call.
+function boundaryAfterLine(write, index) {
+  return write.ownLineHasBoundary || write.boundaryLinesBefore[write.line] > write.boundaryLinesBefore[index + 1];
 }
 
 /**
@@ -802,35 +883,62 @@ function nameResolvesToStatePath(scanLines, index, name, hopsLeft, ctx) {
  * right-hand side that runs past its own `;` into a later statement on that
  * line, and a string that spells the call.
  *
- * `stats`, optional, receives `assignmentLookups`: how many
- * `nearestPrecedingAssignment` calls target resolution made over every write
- * in `text`. A test seam that bounds the work without a clock; `collect`
- * passes none. The count is overwritten on each call, not accumulated across
- * calls, and `stats` must be an object (or omitted): `null` throws.
+ * Cost: the file's lines are read once per name across every write (the
+ * `bindings` cache), each write's own line once per name it resolves, and
+ * each read is linear in the line (`assignmentRegex`, `LOOP_BINDING_RE`).
+ * Not bounded here: a line that holds many writes is read once per write, so
+ * its cost grows with the square of that line's length, and a call left open
+ * (`fs.writeFileSync(` with no closing paren) takes the rest of the file as
+ * its target, which every such call then reads again.
+ *
+ * `stats`, optional, receives two counts over every write in `text`:
+ * `assignmentLookups`, the `nearestPrecedingAssignment` calls, and
+ * `linesRead`, the lines those calls read. A test seam that bounds the work
+ * without a clock; `collect` passes none. Each call overwrites both counts.
+ * Anything but an object (`null`, `undefined`) receives nothing.
  */
-function findRawStateWrites(rel, text, stats = {}) {
-  stats.assignmentLookups = 0;
+function findRawStateWrites(rel, text, stats) {
   const rawLines = text.split('\n');
   const stripped = stripComments(text);
   const joined = stripped.join('\n');
+  const boundaryLinesBefore = [0];
+  for (const line of stripped) boundaryLinesBefore.push(boundaryLinesBefore[boundaryLinesBefore.length - 1] + (BODY_BOUNDARY_RE.test(line) ? 1 : 0));
+  const bindings = { byName: new Map(), linesRead: 0 };
+  const verdicts = new Map();
+  let assignmentLookups = 0;
   const out = [];
   let lineIdx = 0;
+  let lineStart = 0;
   let counted = 0;
   RAW_WRITE_CALL_START_RE.lastIndex = 0;
   let m;
   while ((m = RAW_WRITE_CALL_START_RE.exec(joined)) !== null) {
-    for (; counted < m.index; counted++) if (joined[counted] === '\n') lineIdx++;
+    for (; counted < m.index; counted++) {
+      if (joined[counted] === '\n') {
+        lineIdx++;
+        lineStart = counted + 1;
+      }
+    }
     const targetArg = captureFirstArg(joined, m.index + m[0].length).trim();
     // The write's own line is read up to the call. When that text holds a
     // named-function header (a one-line nested function), it is dropped
     // instead, so the header does not end the scan: the write may read its
     // enclosing function's variable.
-    const scanLines = stripped.slice(0, lineIdx + 1);
-    const cut = joined.slice(joined.lastIndexOf('\n', m.index - 1) + 1, m.index);
-    scanLines[lineIdx] = FUNCTION_DECL_LINE_RE.test(cut) ? '' : cut;
-    const ctx = { memo: new Map(), assignmentLookups: 0 };
-    const hit = resolvesToStatePath(scanLines, lineIdx, targetArg, MAX_TARGET_RESOLUTION_HOPS, ctx);
-    stats.assignmentLookups += ctx.assignmentLookups;
+    const cut = joined.slice(lineStart, m.index);
+    const ownLine = FUNCTION_DECL_LINE_RE.test(cut) ? '' : cut;
+    const write = {
+      lines: stripped,
+      line: lineIdx,
+      ownLine,
+      ownLineHasBoundary: BODY_BOUNDARY_RE.test(ownLine),
+      bindings,
+      boundaryLinesBefore,
+      verdicts,
+      memo: new Map(),
+      assignmentLookups: 0,
+    };
+    const hit = resolvesToStatePath(write, lineIdx, targetArg, MAX_TARGET_RESOLUTION_HOPS);
+    assignmentLookups += write.assignmentLookups;
     if (!hit) continue;
     // `file`/`source` sanitized for the same fork-PR reason as every other
     // finding in this guard.
@@ -841,6 +949,10 @@ function findRawStateWrites(rel, text, stats = {}) {
       line: lineIdx + 1,
       source: sanitizeForReport(rawLines[lineIdx].trim()),
     });
+  }
+  if (stats !== null && typeof stats === 'object') {
+    stats.assignmentLookups = assignmentLookups;
+    stats.linesRead = bindings.linesRead;
   }
   return out;
 }

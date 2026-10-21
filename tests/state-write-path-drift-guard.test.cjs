@@ -765,17 +765,15 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.strictEqual(findRawStateWrites(OTHER_FILE, chainFixture(MAX_TARGET_RESOLUTION_HOPS + 1)).length, 0);
   });
 
-  // Work bound (#5119 review 5558390402, Minor 1). Source files are untrusted
-  // input to lint:ci, and every hop branches over each name a right-hand side
-  // reads. Counted, not timed: `stats.assignmentLookups` is the number of
-  // nearestPrecedingAssignment calls. Memoized per write on (name, line,
-  // hops left), each of the N names is looked up from at most N + 1 lines at
-  // each of MAX_TARGET_RESOLUTION_HOPS depths, and with one assignment per
-  // name each lookup ends within 2 calls. Measured at N = 20 when this row
-  // was added (at MAX_TARGET_RESOLUTION_HOPS = 4): 33215 calls without the
-  // memo, 1694 with it, bound 3360. This row bounds lookups per write only:
-  // it does not bound the number of writes in a file or the cost of one
-  // lookup.
+  // Work bounds. Source files are untrusted input to lint:ci, so the work of
+  // resolving a target must stay polynomial in the file, whatever its text.
+  // Counted, not timed: `stats.assignmentLookups` is the number of
+  // nearestPrecedingAssignment calls and `stats.linesRead` the lines they read.
+  //
+  // Every hop branches over each name a right-hand side reads. Memoized on
+  // (name, line, hops left), each of the N names is looked up from at most
+  // N + 1 lines at each of MAX_TARGET_RESOLUTION_HOPS depths, and with one
+  // assignment per name each lookup ends within 2 calls.
   test('bound: right-hand sides that each read every name cost a polynomial number of assignment lookups', () => {
     const N = 20;
     const sum = Array.from({ length: N }, (_, k) => `v${k}`).join(' + ');
@@ -788,6 +786,64 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.ok(stats.assignmentLookups > 0, 'the seam counts lookups');
     assert.ok(stats.assignmentLookups <= 2 * N * (N + 1) * MAX_TARGET_RESOLUTION_HOPS, `${stats.assignmentLookups} lookups`);
     assert.deepStrictEqual(out, []);
+  });
+
+  // The same names with many writes. A verdict below a write's line is the
+  // same for every write that sees the same body boundaries after it, so the
+  // first write resolves as in the row above, and each later write only looks
+  // up its N target names from its own line (each within 2 calls).
+  test('bound: later writes in a file reuse the verdicts below their line', () => {
+    const N = 10;
+    const WRITES = 50;
+    const sum = Array.from({ length: N }, (_, k) => `v${k}`).join(' + ');
+    const body = [];
+    for (let k = 0; k < N; k++) body.push(`  let v${k} = ${sum};`, '  { }');
+    for (let k = 0; k < WRITES; k++) body.push(`  fs.writeFileSync(${sum}, c);`);
+    const stats = {};
+    const out = findRawStateWrites(OTHER_FILE, W(...body), stats);
+    assert.ok(stats.assignmentLookups > 0, 'the seam counts lookups');
+    const bound = 2 * N * (N + 1) * MAX_TARGET_RESOLUTION_HOPS + WRITES * 2 * N;
+    assert.ok(stats.assignmentLookups <= bound, `${stats.assignmentLookups} lookups, bound ${bound}`);
+    assert.deepStrictEqual(out, []);
+  });
+
+  // Many writes in one file. A line above a write reads the same for every
+  // write, so the file's lines are read at most once per name across all of
+  // its writes, and each write's own line (cut at the call) once per name it
+  // resolves. Here the names are `p`, `path` and `dir`.
+  test('bound: many writes in one file read each line at most once per name, plus each write\'s own line', () => {
+    const N = 200;
+    const body = ["  let p = path.join(dir, 'notes');", '  { }'];
+    for (let k = 0; k < N; k++) body.push('  fs.writeFileSync(p, c);');
+    const text = W(...body);
+    const names = ['p', 'path', 'dir'];
+    const stats = {};
+    const out = findRawStateWrites(OTHER_FILE, text, stats);
+    assert.strictEqual(typeof stats.linesRead, 'number', 'findRawStateWrites reports linesRead');
+    assert.ok(stats.linesRead > 0, 'the seam counts lines read');
+    const fileLines = text.split('\n').length;
+    assert.ok(stats.linesRead <= names.length * (fileLines + N), `${stats.linesRead} lines read`);
+    assert.deepStrictEqual(out, []);
+  });
+
+  // A long run of whitespace on a line that names the variable. Only the
+  // verdicts are asserted: the time a line costs has no counter here.
+  test('whitespace: a long run of spaces on a binding line changes no verdict', () => {
+    const ws = ' '.repeat(4000);
+    assert.deepStrictEqual(lines(W(`  const p${ws}x;`, '  fs.writeFileSync(p, c);')), []);
+    assert.deepStrictEqual(lines(W(`  const p${ws}= path.join(dir, 'STATE.md');`, '  fs.writeFileSync(p, c);')), [3]);
+    assert.deepStrictEqual(lines(W(`  const p:${ws}string = path.join(dir, 'STATE.md');`, '  fs.writeFileSync(p, c);')), [3]);
+    assert.deepStrictEqual(lines(W(`  const p = path.join(dir, 'STATE.md');`, `  for (const p${ws}of xs) {`, '    fs.writeFileSync(p, c);', '  }')), []);
+    assert.deepStrictEqual(lines(W(`  const p = path.join(dir, 'STATE.md');`, `  for (const${ws}q${ws}x) {`, '    fs.writeFileSync(p, c);', '  }')), [4]);
+  });
+
+  test('stats: null or undefined receives nothing and changes no finding', () => {
+    const text = W("  const p = path.join(dir, 'STATE.md');", '  fs.writeFileSync(p, c);');
+    const expected = findRawStateWrites(OTHER_FILE, text, {});
+    assert.strictEqual(expected.length, 1);
+    assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, text, null), expected);
+    assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, text, undefined), expected);
+    assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, text), expected);
   });
 
   test('control: a variable assigned from a non-STATE.md literal, or a loop over an unrelated list, is NOT reported', () => {
