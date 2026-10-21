@@ -422,7 +422,7 @@ GSD는 멀티 에이전트 아키텍처를 사용합니다. 가벼운 오케스�
 | user-profiler | ✓ | | | | | | | | |
 
 **최소 권한 원칙.**
-- Checker는 읽기 전용입니다 (Write/Edit 없음) — 평가만 하며 수정하지 않습니다
+- Checker는 검사 대상을 수정하지 않습니다 (Edit 없음) — plan-checker의 유일한 Write는 stall 감시용 반환 영수증입니다 (#5182). OpenCode, Kilo, Copilot은 Write와 Edit를 하나의 `edit` 권한으로 부여하므로, 설치 프로그램은 그곳에서 plan-checker의 Write를 제거합니다 (읽기 전용으로 유지되고 영수증은 작성되지 않습니다)
 - Researcher는 웹 접근 권한을 가집니다 — 최신 생태계 정보가 필요하기 때문입니다
 - Executor는 Edit 권한을 가집니다 — 코드를 수정하지만 웹 접근은 없습니다
 - Mapper는 Write 권한을 가집니다 — 분석 문서를 작성하지만 Edit은 없습니다 (코드 변경 없음)
