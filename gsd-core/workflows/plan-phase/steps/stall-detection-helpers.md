@@ -25,11 +25,11 @@ empty/truncated/unrecognized-return fallback remain unchanged.
 call takes `{receipt}` as its second argument: a GSD-owned return receipt, one per
 dispatch. Before each Agent() call that carries the receipt line, under either toggle,
 the orchestrator runs
-`gsd_receipt_path "${PHASE_DIR}" <spawn>` (`<spawn>` is `planner`, `checker`, `revision`,
-`outline`, or the plan ID) and substitutes the printed absolute path for `{receipt}`,
+`gsd_receipt_path "${PHASE_DIR}" <spawn> "${PROJECT_ROOT}"` (`<spawn>` is `planner`, `checker`,
+`revision`, `outline`, or the plan ID; `PROJECT_ROOT` is init's `project_root`) and substitutes the printed absolute path for `{receipt}`,
 both in the spawn prompt's `<return_receipt>{receipt}</return_receipt>` line and in
 every watch call for that spawn. If `gsd_receipt_path` prints nothing (it fails closed on
-an unsafe or symlinked phase dir), there is no receipt: omit the `<return_receipt>` line
+an unsafe or symlinked phase dir, naming the reason on stderr), there is no receipt: omit the `<return_receipt>` line
 and pass `""` as the watch's second argument; the wait then ends on the runtime's
 completion result or as `stalled`. Like `$TS`, it is a literal the orchestrator carries
 across tool calls; nothing persists across fences, so never pass an unexpanded
@@ -173,7 +173,7 @@ gsd_stall_should_recover() {
   echo "waiting"; return 0
 }
 
-# gsd_receipt_path PHASE_DIR SPAWN — print a fresh, absolute return-receipt path
+# gsd_receipt_path PHASE_DIR SPAWN [ROOT] — print a fresh, absolute return-receipt path
 # PHASE_DIR/.gsd-returns/SPAWN.EPOCH.XXXXXXXX (#5182). The directory is created
 # (with a `*` .gitignore); the file is NOT (a host Write tool may refuse to
 # overwrite a file the agent never read). Absolute because a subagent's cwd may
@@ -185,49 +185,58 @@ gsd_stall_should_recover() {
 # PHASE_DIR or one holding a quote, `$`, backtick, `<`, `>` or any control
 # character (newline, tab, CR...), which the orchestrator could not substitute
 # safely into a prompt line or a quoted bash argument. It also fails closed unless
-# the receipt directory sits physically under the project root (the orchestrator's
-# `pwd -P`): a checkout can commit the phase dir, `.planning` or `.gsd-returns` as
+# the receipt directory sits physically under ROOT, the project root the workflow
+# resolved (init's `project_root`; the orchestrator's `pwd -P` when ROOT is empty, so a
+# phase dir outside a subdirectory cwd is still accepted when ROOT is passed): a checkout can commit the phase dir, `.planning` or `.gsd-returns` as
 # a symlink, and mkdir -p and the .gitignore write would follow it out of the
 # project. So a symlinked or dangling phase dir (or a missing component on the way
 # to it), a phase dir with a `..` component (after a missing component it would
-# pass the ancestor check, and mkdir -p would then resolve it outside the project),
+# pass the ancestor check, and mkdir -p would then resolve it outside the project)
+# or a `.` component (init's phase_dir never has one),
 # a phase dir that resolves outside the root, and a symlinked .gsd-returns
 # or .gitignore all disable the receipt; the watch then ends on the runtime's
 # completion result or as `stalled`. Both sides are compared after `cd -P`/`pwd -P`
 # (macOS temp dirs live under the /var -> /private/var link; Git Bash maps C:/ to
 # /c/ on both sides). Only static, checked-in links are in scope: a link swapped in
-# between these checks and the mkdir/printf (check-then-act) is not.
+# between these checks and the mkdir/printf (check-then-act) is not. Every refusal
+# prints one `gsd_receipt_path: no receipt: <reason>` line on stderr (the reason only,
+# never the phase dir, which may hold control characters) so the orchestrator can name it.
+_gsd_no_receipt() { printf 'gsd_receipt_path: no receipt: %s\n' "$1" >&2; return 1; }
 gsd_receipt_path() {
   local dir="$1" spawn="${2//[^ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]/_}"
   local root a up phys rest got
   case "$dir" in
-    ''|*[[:cntrl:]]*|*[\'\"\$\`\<\>]*) return 1 ;;
+    ''|*[[:cntrl:]]*|*[\'\"\$\`\<\>]*) _gsd_no_receipt 'phase dir is empty or holds a quote, $, backtick, <, > or a control character'; return 1 ;;
   esac
-  case "/$dir/" in *[/\\]..[/\\]*) return 1 ;; esac
+  case "/$dir/" in *[/\\]..[/\\]*|*[/\\].[/\\]*) _gsd_no_receipt 'phase dir has a . or .. component'; return 1 ;; esac
   case "$dir" in
     /*|[A-Za-z]:[/\\]*) ;;
     *) dir="$(pwd)/$dir" ;;
   esac
   while [ "${#dir}" -gt 1 ] && [ "${dir%/}" != "$dir" ]; do dir="${dir%/}"; done
-  root=$(pwd -P) || return 1
+  if [ -n "${3:-}" ]; then
+    root=$(CDPATH='' cd -P -- "$3" >/dev/null 2>&1 && pwd -P) || { _gsd_no_receipt 'project root does not resolve'; return 1; }
+  else
+    root=$(pwd -P) || { _gsd_no_receipt 'working directory does not resolve'; return 1; }
+  fi
   # Walk up to the nearest existing ancestor; any walked component that is a link
   # (tested before -e, so a dangling one counts) is refused.
   a="$dir"
   while :; do
-    [ -L "$a" ] && return 1
+    [ -L "$a" ] && { _gsd_no_receipt 'a symlink on the path to the phase dir'; return 1; }
     [ -e "$a" ] && break
     up="${a%/*}"; [ -n "$up" ] || up=/
-    [ "$up" = "$a" ] && return 1
+    [ "$up" = "$a" ] && { _gsd_no_receipt 'no existing ancestor of the phase dir'; return 1; }
     a="$up"
   done
-  phys=$(CDPATH='' cd -P -- "$a" >/dev/null 2>&1 && pwd -P) || return 1
-  case "$phys/" in "$root"/*) ;; *) return 1 ;; esac
+  phys=$(CDPATH='' cd -P -- "$a" >/dev/null 2>&1 && pwd -P) || { _gsd_no_receipt 'the phase dir ancestor does not resolve'; return 1; }
+  case "$phys/" in "$root"/*) ;; *) _gsd_no_receipt 'the phase dir resolves outside the project root'; return 1 ;; esac
   rest="${dir#"$a"}"
-  [ -L "$dir/.gsd-returns" ] && return 1
-  mkdir -p "$dir/.gsd-returns" || return 1
-  got=$(CDPATH='' cd -P -- "$dir/.gsd-returns" >/dev/null 2>&1 && pwd -P) || return 1
-  [ "$got" = "${phys%/}$rest/.gsd-returns" ] || return 1
-  [ -L "$dir/.gsd-returns/.gitignore" ] && return 1
+  [ -L "$dir/.gsd-returns" ] && { _gsd_no_receipt '.gsd-returns is a symlink'; return 1; }
+  mkdir -p "$dir/.gsd-returns" || { _gsd_no_receipt 'cannot create .gsd-returns'; return 1; }
+  got=$(CDPATH='' cd -P -- "$dir/.gsd-returns" >/dev/null 2>&1 && pwd -P) || { _gsd_no_receipt '.gsd-returns does not resolve'; return 1; }
+  [ "$got" = "${phys%/}$rest/.gsd-returns" ] || { _gsd_no_receipt '.gsd-returns resolves elsewhere'; return 1; }
+  [ -L "$dir/.gsd-returns/.gitignore" ] && { _gsd_no_receipt '.gsd-returns/.gitignore is a symlink'; return 1; }
   [ -f "$dir/.gsd-returns/.gitignore" ] || printf '*\n' > "$dir/.gsd-returns/.gitignore"
   if command -v cygpath >/dev/null 2>&1; then dir=$(cygpath -m "$dir"); fi
   mktemp -u "$dir/.gsd-returns/${spawn:-spawn}.$(date +%s).XXXXXXXX"

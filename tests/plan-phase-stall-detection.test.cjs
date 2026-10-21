@@ -838,7 +838,12 @@ describe('bug #2650 plan-phase — all five planner/plan-checker spawns dispatch
     assert.notEqual(idx, -1);
     const nextSectionIdx = workflow.indexOf('## 8. Spawn gsd-planner Agent', idx);
     const section = workflow.slice(idx, nextSectionIdx === -1 ? undefined : nextSectionIdx);
-    assert.match(section, /`\{receipt\}` = `gsd_receipt_path "\$\{PHASE_DIR\}" <spawn>`/, 'step 7.99 must bind {receipt} from gsd_receipt_path, not leave it as literal text');
+    assert.match(section, /`\{receipt\}` = `gsd_receipt_path "\$\{PHASE_DIR\}" <spawn> "\$\{PROJECT_ROOT\}"`/, 'step 7.99 must bind {receipt} from gsd_receipt_path, anchored on the project root (review 5563209291 Minor 1)');
+    // Every bind site passes the project root init resolved, never the cwd default.
+    const binds = [...`${workflow}\n${readChunkedPlanningMode()}\n${readStallHelpersDoc()}`.matchAll(/`gsd_receipt_path "\$\{PHASE_DIR\}" [^`]*`/g)].map((m) => m[0]);
+    assert.ok(binds.length >= 4, `the bind sites are found (${binds.length})`);
+    for (const bind of binds) assert.match(bind, /"\$\{PROJECT_ROOT\}"`$/, `${bind}: passes the project root`);
+    assert.match(workflow, /`project_root` \(`PROJECT_ROOT`\)/, 'plan-phase parses project_root from the init JSON');
     // The full binding contract lives in the lazily-loaded reference file to stay
     // under the PRE_PHASE6 cap — verify it is actually there, not just gestured at.
     // #5182 replaced the {outputFile} binding (a host transcript that already holds
@@ -1406,13 +1411,17 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
 
   // A hostile checkout can commit <phase>/.gsd-returns (or its .gitignore) as a
   // symlink; mkdir -p and the .gitignore printf would follow it out of the phase.
+  // A skip is allowed only off CI: every CI runner, Windows included, creates these
+  // links (the Windows shards ran every symlink row of this file without a skip at
+  // 35bf07e37), so in CI a refused link fails the row instead of passing it with
+  // zero assertions.
   function symlinkOrSkip(t, target, link, type) {
     try {
       fs.symlinkSync(target, link, type === 'dir' && process.platform === 'win32' ? 'junction' : type);
       return true;
     } catch (error) {
-      if (error && ['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code)) {
-        t.skip('symlink creation is not available on this platform');
+      if (error && ['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code) && !process.env.CI) {
+        t.skip(`symlink creation is not available here (${error.code}); CI runs this row`);
         return false;
       }
       throw error;
@@ -1524,12 +1533,138 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     return out;
   }
 
-  // gsd_receipt_path run from `cwd`, PHASE_DIR handed over through a file (never argv).
-  function receiptPathFrom(f, cwd, phaseDir) {
+  // gsd_receipt_path run from `cwd`, PHASE_DIR handed over through a file (never argv);
+  // `root` is the optional third argument (init's project_root).
+  function receiptPathFrom(f, cwd, phaseDir, root) {
     const valueFile = path.join(f.dir, 'phase-dir-value.bin');
     fs.writeFileSync(valueFile, phaseDir);
-    return runBashScript(`${extractStallFunctionsBash()}\ncd ${q(cwd)}\nIFS= read -r -d '' d < ${q(fwd(valueFile))} || true\ngsd_receipt_path "$d" checker\n`, []);
+    const rootArg = root === undefined ? '' : ` ${q(fwd(root))}`;
+    return runBashScript(`${extractStallFunctionsBash()}\ncd ${q(cwd)}\nIFS= read -r -d '' d < ${q(fwd(valueFile))} || true\ngsd_receipt_path "$d" checker${rootArg}\n`, []);
   }
+
+  // A refusal names its reason in exactly one stderr line with a fixed prefix (the
+  // reason text itself is not pinned).
+  function assertRefusalReason(r, label) {
+    const lines = r.stderr.split('\n').filter(Boolean);
+    assert.equal(lines.length, 1, `${label}: one stderr line, got ${JSON.stringify(r.stderr)}`);
+    assert.match(lines[0], /^gsd_receipt_path: no receipt: \S/, `${label}: the stderr line names a reason`);
+  }
+
+  // Review 5563209291 Minor 1: containment is anchored on the project root the workflow
+  // resolved (init's project_root), not on the orchestrator's cwd.
+  test('gsd_receipt_path accepts an absolute phase dir under the project root from a cwd outside it, and names the reason when it refuses', (t) => {
+    const f = fixture(t);
+    const proj = path.join(f.dir, 'proj');
+    const phase = path.join(proj, '.planning', 'phases', '01-x');
+    fs.mkdirSync(phase, { recursive: true });
+    fs.mkdirSync(path.join(proj, 'sub'));
+    const sibling = path.join(f.dir, 'sibling');
+    fs.mkdirSync(sibling);
+    // cwd is a subdirectory of the project, so the phase dir is outside the cwd.
+    const ok = receiptPathFrom(f, path.join(proj, 'sub'), fwd(phase), proj);
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.equal(ok.stderr, '', 'an accepted receipt prints nothing on stderr');
+    assert.match(ok.stdout.trim(), /\/proj\/\.planning\/phases\/01-x\/\.gsd-returns\/checker\.\d+\.[A-Za-z0-9]+$/);
+    assert.ok(fs.existsSync(path.join(phase, '.gsd-returns', '.gitignore')), 'the receipt directory is created under the phase dir');
+    // The same call from a cwd OUTSIDE the project (the orchestrator's cwd no longer matters).
+    const fromSibling = receiptPathFrom(f, sibling, fwd(phase), proj);
+    assert.equal(fromSibling.status, 0, fromSibling.stderr);
+    // Without the root argument the cwd is the anchor, so the same phase dir is refused, with a reason.
+    const noRoot = receiptPathFrom(f, path.join(proj, 'sub'), fwd(phase));
+    assert.notEqual(noRoot.status, 0, 'with no root argument the cwd anchors the check');
+    assert.equal(noRoot.stdout, '');
+    assertRefusalReason(noRoot, 'cwd-anchored');
+    // A phase dir outside the passed root is still refused, and nothing is created there.
+    const outside = receiptPathFrom(f, proj, `${fwd(sibling)}/ph`, proj);
+    assert.notEqual(outside.status, 0, 'a phase dir outside the project root is refused');
+    assertRefusalReason(outside, 'outside the root');
+    assert.deepEqual(treeOf(sibling), [], 'nothing is created outside the root');
+    // A root that does not resolve refuses rather than falling back.
+    const badRoot = receiptPathFrom(f, proj, fwd(phase), path.join(f.dir, 'no-such-root'));
+    assert.notEqual(badRoot.status, 0, 'an unresolvable root is refused');
+    assertRefusalReason(badRoot, 'unresolvable root');
+  });
+
+  test('every gsd_receipt_path refusal names its reason on one stderr line', (t) => {
+    const f = fixture(t);
+    const proj = path.join(f.dir, 'proj');
+    fs.mkdirSync(path.join(proj, 'ph'), { recursive: true });
+    const outside = outsideDir(t);
+    const cases = [
+      ['ph"ase', 'unsafe character'],
+      ['ph\nase', 'control character'],
+      ['', 'empty'],
+      ['ph/../ph', '.. component'],
+      ['ph/./x', '. component'],
+      [`${fwd(outside)}/ph`, 'outside the project'],
+    ];
+    if (symlinkOrSkip(t, outside, path.join(proj, 'ph', '.gsd-returns'), 'dir')) cases.push(['ph', 'symlinked .gsd-returns']);
+    let ran = 0;
+    for (const [phaseDir, label] of cases) {
+      const r = receiptPathFrom(f, proj, phaseDir, proj);
+      assert.notEqual(r.status, 0, `${label}: refused`);
+      assert.equal(r.stdout, '', `${label}: no path printed`);
+      assertRefusalReason(r, label);
+      assert.ok(!r.stderr.includes(phaseDir) || phaseDir === '' || phaseDir === 'ph', `${label}: the phase dir itself is never echoed`);
+      ran += 1;
+    }
+    assert.ok(ran >= 6);
+  });
+
+  // Review 5563209291 Minor 3: path-shaped generation. Segments are drawn from `a`, `.`,
+  // `..` and `link`; `proj/link` and `proj/a/link` are links to a directory outside the
+  // project, and a `link` segment anywhere else is a plain (missing) directory name. A dir
+  // is relative to the project, absolute under it, or absolute under a sibling outside it.
+  // The oracle is the refusal set: a `.` or `..` segment, a `link` segment where the link
+  // is, or a sibling base is refused; anything else gets a receipt under <dir>/.gsd-returns/.
+  function crossesLink(segs) {
+    return segs.some((seg, i) => seg === 'link' && (i === 0 || (i === 1 && segs[0] === 'a')));
+  }
+  test('property: a path built from a, ., .. and link segments gets a receipt iff it has no . or .., crosses no link and stays under the project root', (t) => {
+    const f = fixture(t);
+    const proj = path.join(f.dir, 'proj');
+    const sibling = path.join(f.dir, 'sibling');
+    fs.mkdirSync(path.join(proj, 'a', 'a'), { recursive: true });
+    fs.mkdirSync(sibling);
+    const outside = outsideDir(t);
+    fs.mkdirSync(path.join(outside, 'a', 'a'), { recursive: true });
+    if (!symlinkOrSkip(t, outside, path.join(proj, 'link'), 'dir')) return;
+    if (!symlinkOrSkip(t, outside, path.join(proj, 'a', 'link'), 'dir')) return;
+    const caseArb = fc.record({
+      // `a` is weighted so accepted paths are common; one fixed case per side is
+      // appended to every run below, so both sides of the oracle always execute.
+      segs: fc.array(fc.oneof({ arbitrary: fc.constant('a'), weight: 5 }, fc.constantFrom('.', '..', 'link')), { minLength: 1, maxLength: 4 }),
+      base: fc.constantFrom('rel', 'abs', 'sibling'),
+    });
+    const P = fwd(proj);
+    const S = fwd(sibling);
+    let accepted = 0;
+    let refused = 0;
+    fc.assert(fc.property(fc.array(caseArb, { minLength: 1, maxLength: 12 }), (generated) => {
+      const cases = [...generated, { segs: ['a'], base: 'abs' }, { segs: ['link', 'a'], base: 'rel' }];
+      const outsideBefore = treeOf(outside);
+      const siblingBefore = treeOf(sibling);
+      const dirs = cases.map(({ segs, base }) => {
+        const rel = segs.join('/');
+        return base === 'rel' ? rel : base === 'abs' ? `${P}/${rel}` : `${S}/${rel}`;
+      });
+      const script = dirs.map((d, i) =>
+        `if p=$(gsd_receipt_path ${q(d)} x ${q(P)} 2>/dev/null); then printf '%s\\t%s\\n' ${i} "$p"; else printf '%s\\tFAIL\\n' ${i}; fi`).join('\n');
+      const out = runHelpers(`cd ${q(P)}\n${script}`);
+      const got = new Map(out.split('\n').filter(Boolean).map((l) => [l.slice(0, l.indexOf('\t')), l.slice(l.indexOf('\t') + 1)]));
+      const ok = cases.every(({ segs, base }, i) => {
+        const expectRefused = base === 'sibling' || segs.some((s) => s === '.' || s === '..') || crossesLink(segs);
+        const p = got.get(String(i));
+        if (expectRefused) { refused += 1; return p === 'FAIL'; }
+        accepted += 1;
+        return p !== 'FAIL' && p.toLowerCase().includes(`/proj/${segs.join('/')}/.gsd-returns/x.`.toLowerCase());
+      });
+      return ok && got.size === cases.length &&
+        JSON.stringify(treeOf(outside)) === JSON.stringify(outsideBefore) &&
+        JSON.stringify(treeOf(sibling)) === JSON.stringify(siblingBefore);
+    }), { numRuns: 8 });
+    assert.ok(accepted > 0 && refused > 0, `both sides of the oracle ran (accepted ${accepted}, refused ${refused})`);
+  });
 
   test('gsd_receipt_path refuses a symlinked phase directory (relative or absolute) and creates nothing in its target', (t) => {
     const f = fixture(t);
