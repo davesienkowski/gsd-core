@@ -48,6 +48,7 @@ const os = require('node:os');
 const path = require('node:path');
 const fc = require('fast-check');
 const { cleanup, readFileNormalized, readWorkflowCombined, runGsdTools } = require('./helpers.cjs');
+const { splitLines } = require('../gsd-core/bin/lib/text-lines.cjs');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const PLAN_PHASE_PATH = path.join(REPO_ROOT, 'gsd-core', 'workflows', 'plan-phase.md');
@@ -1508,22 +1509,19 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     // declares Write (Group B) and the receipt is its only write.
     assert.match(checker.match(/^tools:.*$/m)[0], /\bWrite\b/, 'the checker declares Write for its receipt');
     const rule = checker.slice(checker.indexOf('**Return receipt (#5182):**'));
-    assert.match(rule.slice(0, 600), /the Write tool/, 'the checker receipt rule names the Write tool');
-    assert.match(rule.slice(0, 600), /only write/, 'the receipt is the checker\'s only write');
-    assert.doesNotMatch(rule.slice(0, 600), /printf/, 'no Bash printf write remains in the checker receipt rule');
+    assert.doesNotMatch(rule.slice(0, 700), /printf/, 'no Bash printf write appears in the checker receipt rule');
     // The limit must hold on spawns that send no receipt (quick, quick-batch, import), so it
     // also lives in <anti_patterns>, outside the receipt-conditional rule.
     const anti = checker.slice(checker.indexOf('<anti_patterns>'), checker.indexOf('</anti_patterns>'));
-    assert.match(anti, /DO NOT\*\* use Write on any file except the `<return_receipt>` path/, 'the write limit is unconditional');
+    assert.ok(anti.includes('`<return_receipt>`'), 'the write limit names the receipt path in <anti_patterns>');
   });
 
-  // Prose-contract rows are deliberately reduced to command tokens and one keyword,
-  // so rewording the explanation around them does not break the suite.
-  test('helpers doc: receipts are removed after routing and the checker receipt is written on every host', () => {
+  // Prose-contract rows are reduced to command tokens, so rewording the explanation
+  // around them does not break the suite (review 5563209291 Nit 4). The checker's
+  // per-host posture is pinned on the installed artifacts in agent-tools.install.test.cjs.
+  test('helpers doc: receipts are removed after routing', () => {
     const doc = readStallHelpersDoc();
     assert.match(doc, /rm -f "\{receipt\}"/, 'the orchestrator removes the receipt after routing');
-    assert.match(doc, /Group B report-writer/, 'the checker posture (#767 Group B) is stated');
-    assert.doesNotMatch(doc, /refuses that write/, 'the retired read-only degradation is no longer described');
   });
 
   // -- Review 5477738387 (#5182): physical containment of the receipt directory, hostile
@@ -1936,8 +1934,6 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     assert.match(near, /checker[^\n]*no receipt|no receipt[^\n]*checker/i, 'the checker-without-receipt outcome is stated beside the kimi-code note');
     assert.match(near, /first `?PLAN\.md`?/, 'the planner before its first PLAN.md is named');
     assert.match(near, /`stalled` at the threshold/, 'the outcome is stalled at the threshold');
-    assert.match(near, /no heartbeat/i, 'it says there is no heartbeat protocol');
-    assert.doesNotMatch(doc, /After routing, the orchestrator runs/, 'the prose-only cleanup sentence is replaced by the site commands');
   });
 
   // gsd_receipt_path fails closed (rc=1, no output); the orchestrator must know what to
@@ -1952,28 +1948,39 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     assert.equal(watch(NOW - 11 * 60, '', f.noPlans, checker.markers), 'stalled', 'past the threshold an empty receipt ends stalled');
   });
 
-  // -- Review 5477738387 Minor 5: the *-PLAN.md freshness window (find -mmin -INTERVAL)
-  // at its edge. find reads the real clock, not the stubbed `date +%s`, so the mtime is
-  // set from the wall clock just before the call. GNU find and BSD find round a file's
-  // age to whole minutes differently (BSD rounds up), so "inside" is 3m20s old (under 4
-  // minutes even rounded up, with slack for a slow bash start) and "outside" is 5m10s
-  // old, past the 5-minute interval under either rounding. Boundary rows on unchanged
-  // code: green before and after this change.
+  // -- Review 5477738387 Minor 5 / 5563209291 Minor 5: the *-PLAN.md freshness window
+  // (find -mmin -INTERVAL) at its edge, with no wall clock. A `find` shim (a shell
+  // function shadows the binary for this script) logs its argv and reports a controlled
+  // age, AGE seconds, for every path it is handed: a path is printed iff AGE is under
+  // the -mmin window. The rows pin what gsd_stall_watch hands find and how it reads the
+  // answer; real find's -mmin parsing is covered by the #2650 row above.
   test('*-PLAN.md freshness boundary: a plan just inside the interval is active, just outside is waiting', (t) => {
     const f = fixture(t);
     const markers = watchCallOf(sectionOf(readPlanPhase(), PLANNER_SECTION)).markers;
     const plan = path.join(f.dir, '01-PLAN.md');
     fs.writeFileSync(plan, '# plan\n');
-    const glob = `${f.fwd}/*-PLAN.md`;
-    const age = (seconds) => {
-      const at = Date.now() / 1000 - seconds;
-      fs.utimesSync(plan, at, at);
+    const argvLog = path.join(f.dir, 'find-argv.txt');
+    const shim = [
+      'find() {',
+      `  printf '%s\\n' "$@" > ${q(fwd(argvLog))}`,
+      '  local mins="" a; local -a paths=()',
+      '  while [ $# -gt 0 ]; do case "$1" in -mmin) mins="${2#-}"; shift 2 ;; *) paths+=("$1"); shift ;; esac; done',
+      '  for a in "${paths[@]}"; do [ "$AGE" -lt $(( mins * 60 )) ] && printf \'%s\\n\' "$a"; done',
+      '  return 0',
+      '}',
+    ].join('\n');
+    const aged = (age, interval, glob = `${f.fwd}/*-PLAN.md`) => {
+      cleanup(argvLog);
+      const call = `gsd_stall_watch ${q(NOW)} ${q(f.receipt)} ${q(glob)}${markers.map((x) => ` ${q(x)}`).join('')}`;
+      return runHelpers(`${shim}\nAGE=${age}\n${call}`, { interval, threshold: 99999 });
     };
-    age(200);
-    assert.equal(watch(NOW, f.receipt, glob, markers, { interval: 5, threshold: 99999 }), 'active', '3m20s old: inside a 5-minute interval');
-    age(310);
-    assert.equal(watch(NOW, f.receipt, glob, markers, { interval: 5, threshold: 99999 }), 'waiting', '5m10s old: outside a 5-minute interval');
-    age(310);
-    assert.equal(watch(NOW, f.receipt, glob, markers, { interval: 7, threshold: 99999 }), 'active', 'the window follows the interval: 5m10s is inside 7 minutes');
+    assert.equal(aged(299, 5), 'active', '4m59s old: inside a 5-minute interval');
+    assert.deepEqual(splitLines(fs.readFileSync(argvLog, 'utf8')).filter(Boolean), [fwd(plan), '-mmin', '-5'],
+      'find is handed the expanded plan path and the interval as -mmin -N');
+    assert.equal(aged(300, 5), 'waiting', '5m00s old: outside a 5-minute interval');
+    assert.equal(aged(300, 7), 'active', 'the window follows the interval: 5m00s is inside 7 minutes');
+    assert.equal(splitLines(fs.readFileSync(argvLog, 'utf8')).filter(Boolean).pop(), '-7');
+    assert.equal(aged(0, 5, `${f.fwd}/none-*-PLAN.md`), 'waiting', 'no plan file: find is not run and there is no activity');
+    assert.equal(fs.existsSync(argvLog), false, 'find is not called when the glob matches nothing');
   });
 });
