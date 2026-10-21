@@ -523,14 +523,16 @@ function isQuotedLiteralArg(arg) {
  *     caller can resume its scan above the assignment it followed.
  *   - `firstLine`: read this text in place of `lines[index]`. Axis 2 passes
  *     the write's own line cut at the call.
- *   - `cache`: a `{ byName, linesRead }` object shared by every call over the
- *     same `lines` with the same options. Each line is then read at most once
- *     per name: a scan stops at the first line whose result is cached, and
- *     records its result for every line it read. `firstLine` is never cached.
- *     `linesRead` counts the lines read.
+ *   - `cache`: a `{ byName, linesRead, assignmentMatches }` object shared by
+ *     every call over the same `lines` with the same options. Each line is
+ *     then read at most once per name: a scan stops at the first line whose
+ *     result is cached, and records its result for every line it read.
+ *     `firstLine` is never cached.
+ *     `linesRead` counts the lines read, `assignmentMatches` the assignment
+ *     heads `assignedValue` decided on them.
  */
 function nearestPrecedingAssignment(lines, index, varName, options = {}) {
-  const assignRe = assignmentRegex(varName, options.typed);
+  const assignRe = assignmentHeadRegex(varName, options.typed);
   const cache = options.cache;
   let known = null;
   if (cache) {
@@ -550,9 +552,9 @@ function nearestPrecedingAssignment(lines, index, varName, options = {}) {
     if (FUNCTION_DECL_LINE_RE.test(line)) break;
     if (!line.includes(varName)) continue; // a line without the name cannot bind it
     if (options.stopAtPatternBinding && bindsByPattern(line, varName)) break;
-    const m = assignRe.exec(line);
-    if (m) {
-      result = options.withLine ? { rhs: m[1].trim(), line: i } : m[1].trim();
+    const rhs = assignedValue(line, assignRe, cache);
+    if (rhs !== null) {
+      result = options.withLine ? { rhs: rhs.trim(), line: i } : rhs.trim();
       break;
     }
   }
@@ -561,22 +563,50 @@ function nearestPrecedingAssignment(lines, index, varName, options = {}) {
 }
 
 /**
- * The assignment regex `nearestPrecedingAssignment` matches a line with. Its
- * language is `(?:^|[^.\w$])T\s*=\s*([^=].*)$`, where `T` is
+ * How `nearestPrecedingAssignment` reads an assignment on a line. The reading
+ * is the regex `(?:^|[^.\w$])T\s*=\s*([^=].*)$`, where `T` is
  * `(?:const|let|var)?\s*NAME` or, when `typed`, also
- * `(?:const|let|var)\s+NAME\s*:[^=;]+?`. Matched in that form, every position
- * in a long run of whitespace can start a match and backtrack over the rest
- * of the run, so one line costs time quadratic in the run. Here each match
- * starts at the name and a lookbehind reads the text before it, so a line
- * costs time linear in its length. The language and the captured right-hand
- * side are unchanged (`[^=;]+?\s*=` is `[^=;]+=`, because `[^=;]` already
- * holds whitespace).
+ * `(?:const|let|var)\s+NAME\s*:[^=;]+?`, and the result is its capture.
+ * Matched in that form it backtracks: every position in a long run of
+ * whitespace can start a match and rescan the rest of the run, and when a
+ * line terminator `.` does not match (`\r`, U+2028, U+2029) follows a run
+ * after `=`, each shorter run is tried and rescanned up to it. One line then
+ * costs time quadratic in the run. So the regex is split, with the same
+ * result:
+ *   - `assignmentHeadRegex` matches up to the `=` and its whole whitespace run.
+ *     Each match starts at the name and a lookbehind reads the text before
+ *     it (`[^=;]+?\s*=` is written `[^=;]+=`, the same language, because
+ *     `[^=;]` already holds whitespace).
+ *   - `assignedValue` then decides the old tail `\s*([^=].*)$` from that one
+ *     position: the old match could only start its capture at the end of the
+ *     run, or one character before it when that end is `=` or the end of the
+ *     line, and `.*$` holds only when no line terminator follows. Each head
+ *     match costs time linear in what it reads, and a failed one resumes one
+ *     character on.
  */
-function assignmentRegex(varName, typed) {
+function assignmentHeadRegex(varName, typed) {
   const name = escapeRegex(varName);
   const lead = '(?:^|[^.\\w$])';
   const typedForm = typed ? `(?<=${lead}(?:const|let|var)\\s+${name})\\s*:[^=;]+=|` : '';
-  return new RegExp(`${name}(?:${typedForm}(?<=${lead}(?:const|let|var)?\\s*${name})\\s*=)\\s*([^=].*)$`);
+  return new RegExp(`${name}(?:${typedForm}(?<=${lead}(?:const|let|var)?\\s*${name})\\s*=)(?=(\\s*))\\1`, 'g');
+}
+
+// The right-hand side `assignmentHeadRegex` (`re`) reads on `line`, untrimmed,
+// or `null`. See there. `counter.assignmentMatches`, when given, counts the
+// head matches decided.
+function assignedValue(line, re, counter) {
+  // The last character `.` does not match, or -1.
+  const terminator = Math.max(...['\n', '\r', '\u2028', '\u2029'].map((c) => line.lastIndexOf(c)));
+  re.lastIndex = 0;
+  let m;
+  while ((m = re.exec(line)) !== null) {
+    if (counter) counter.assignmentMatches++;
+    const end = m.index + m[0].length; // the end of the run after `=`
+    if (end < line.length && line[end] !== '=' && end >= terminator) return line.slice(end);
+    if (m[1].length > 0 && end - 1 >= terminator) return line.slice(end - 1);
+    re.lastIndex = m.index + 1;
+  }
+  return null;
 }
 
 // A `for (const|let|var <pattern> of …)` loop header, or a `const|let|var`
@@ -884,18 +914,23 @@ function boundaryAfterLine(write, index) {
  * line, and a string that spells the call.
  *
  * Cost: the file's lines are read once per name across every write (the
- * `bindings` cache), each write's own line once per name it resolves, and
- * each read is linear in the line (`assignmentRegex`, `LOOP_BINDING_RE`).
- * Not bounded here: a line that holds many writes is read once per write, so
- * its cost grows with the square of that line's length, and a call left open
- * (`fs.writeFileSync(` with no closing paren) takes the rest of the file as
- * its target, which every such call then reads again.
+ * `bindings` cache) and each write's own line once per name it resolves. A
+ * long run of whitespace, with or without a line terminator `.` does not
+ * match after it, costs a read time linear in the line (`assignedValue`,
+ * `LOOP_BINDING_RE`). Not bounded here, each quadratic in one line's length:
+ * a line that holds many writes, read once per write; a call left open
+ * (`fs.writeFileSync(` with no closing paren), which takes the rest of the
+ * file as its target for every such call; and a line that repeats a
+ * declaration or `for` header of the name many times, where each repeat
+ * scans on to the end of the line.
  *
- * `stats`, optional, receives two counts over every write in `text`:
- * `assignmentLookups`, the `nearestPrecedingAssignment` calls, and
- * `linesRead`, the lines those calls read. A test seam that bounds the work
- * without a clock; `collect` passes none. Each call overwrites both counts.
- * Anything but an object (`null`, `undefined`) receives nothing.
+ * `stats`, optional, receives three counts over every write in `text`:
+ * `assignmentLookups`, the `nearestPrecedingAssignment` calls, `linesRead`,
+ * the lines those calls read, and `assignmentMatches`, the assignment heads
+ * decided on those lines (each in constant time once matched). A test seam
+ * that bounds the work without a clock; `collect` passes none. Each call
+ * overwrites the counts. Anything but an object (`null`, `undefined`)
+ * receives nothing.
  */
 function findRawStateWrites(rel, text, stats) {
   const rawLines = text.split('\n');
@@ -903,7 +938,7 @@ function findRawStateWrites(rel, text, stats) {
   const joined = stripped.join('\n');
   const boundaryLinesBefore = [0];
   for (const line of stripped) boundaryLinesBefore.push(boundaryLinesBefore[boundaryLinesBefore.length - 1] + (BODY_BOUNDARY_RE.test(line) ? 1 : 0));
-  const bindings = { byName: new Map(), linesRead: 0 };
+  const bindings = { byName: new Map(), linesRead: 0, assignmentMatches: 0 };
   const verdicts = new Map();
   let assignmentLookups = 0;
   const out = [];
@@ -953,6 +988,7 @@ function findRawStateWrites(rel, text, stats) {
   if (stats !== null && typeof stats === 'object') {
     stats.assignmentLookups = assignmentLookups;
     stats.linesRead = bindings.linesRead;
+    stats.assignmentMatches = bindings.assignmentMatches;
   }
   return out;
 }

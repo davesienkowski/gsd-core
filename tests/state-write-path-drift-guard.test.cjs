@@ -807,6 +807,14 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.deepStrictEqual(out, []);
   });
 
+  // A verdict below a write's line is shared with a later write only when the
+  // same body boundaries follow it: here a `}` between the two writes lets the
+  // second one go past `p = x` to the STATE.md assignment, so they differ.
+  test('bound: a shared verdict is not reused across a body boundary between two writes', () => {
+    const text = W("  let p = path.join(dir, 'STATE.md');", '  p = x;', '  const q = p;', '  fs.writeFileSync(q, c);', '  }', '  fs.writeFileSync(q, c);');
+    assert.deepStrictEqual(lines(text), [7]);
+  });
+
   // Many writes in one file. A line above a write reads the same for every
   // write, so the file's lines are read at most once per name across all of
   // its writes, and each write's own line (cut at the call) once per name it
@@ -835,6 +843,24 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.deepStrictEqual(lines(W(`  const p:${ws}string = path.join(dir, 'STATE.md');`, '  fs.writeFileSync(p, c);')), [3]);
     assert.deepStrictEqual(lines(W(`  const p = path.join(dir, 'STATE.md');`, `  for (const p${ws}of xs) {`, '    fs.writeFileSync(p, c);', '  }')), []);
     assert.deepStrictEqual(lines(W(`  const p = path.join(dir, 'STATE.md');`, `  for (const${ws}q${ws}x) {`, '    fs.writeFileSync(p, c);', '  }')), [4]);
+  });
+
+  // A run after `=` that a line terminator `.` does not match ends (`\r` in a
+  // CRLF file, U+2028). Each assignment head the scan matches is decided once,
+  // so the heads decided are at most the occurrences of the name. The count
+  // bounds the matches tried, not the steps inside one; verdicts are pinned.
+  test('bound: a run after `=` ending in \\r or U+2028 decides each assignment head once', () => {
+    const ws = ' '.repeat(4000);
+    for (const end of ['\r', ' ']) {
+      const unread = W(`  const p =${ws}x;${end}`, '  p = p = p = p;' + end, '  fs.writeFileSync(p, c);');
+      const stats = {};
+      assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, unread, stats).map((f) => f.line), [], JSON.stringify(end));
+      assert.strictEqual(typeof stats.assignmentMatches, 'number', 'findRawStateWrites reports assignmentMatches');
+      assert.ok(stats.assignmentMatches > 0, 'the seam counts assignment heads');
+      assert.ok(stats.assignmentMatches <= unread.match(/\bp\b/g).length, `${stats.assignmentMatches} heads`);
+      // The terminator inside the run, before the value: the value is read.
+      assert.deepStrictEqual(lines(W(`  const p =${ws}${end}  path.join(dir, 'STATE.md');`, '  fs.writeFileSync(p, c);')), [3], JSON.stringify(end));
+    }
   });
 
   test('stats: null or undefined receives nothing and changes no finding', () => {
@@ -869,7 +895,7 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     );
   });
 
-  // Boundary rule (#5119 review 5477747649, Major 1): an assignment in a closed
+  // Boundary rule: an assignment in a closed
   // sibling block or arrow body is not in scope at the write. The nearest
   // assignment ends the search only when no `{`, `}` or `=>` lies between it
   // and the write; otherwise the search goes on to the next earlier one.
@@ -889,7 +915,7 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     );
   });
 
-  // Typed declarations (#5119 review 5477747649, Major 2): the scanned sources
+  // Typed declarations: the scanned sources
   // are TypeScript, so a declaration may carry an annotation before `=`.
   test('typed: a typed declaration binds its name for Axis 2', () => {
     for (const decl of ['const p: string', 'let p: string', 'var p: string', 'const p: Array<string>', 'let p: string | undefined', 'const p: Record<string, string>']) {
