@@ -248,30 +248,39 @@ gsd_receipt_path() {
 # gsd_return_marker FILE MARKER... — print the first MARKER that STARTS a line of
 # FILE's first 64 lines and first 4096 bytes (the receipt is agent-written; one
 # marker line is expected; the byte cap keeps one huge line from stalling the
-# watch), or nothing. Literal prefix match (no regex), and the marker must be
+# watch), or nothing. A marker must end within those 4096 bytes and its boundary
+# must be seen (4097 bytes are read): a line cut at the read window ends nowhere, so
+# a longer word cut at the cap is never taken for a marker. Literal prefix match (no regex), and the marker must be
 # followed by the end of the line, a space, tab, CR, VT, FF or a colon (the
 # planner's Source Audit return puts `: Unplanned Items Found` after its marker),
 # so `## PLAN COMPLETE-x` or a
-# longer word that merely starts with a marker is not that marker. A leading BOM
-# and a missing final newline are tolerated. A receipt that is a symlink is never
+# longer word that merely starts with a marker is not that marker. A BOM at the
+# start of the file (line 1 only) and a missing final newline are tolerated. A receipt that is a symlink is never
 # read. The one owner of "which marker did the agent return": gsd_stall_watch and
 # step 11's routing both use it. Indented, mid-line, or JSON-encoded marker text
 # (prompts, agent definitions, transcripts) never matches.
 gsd_return_marker() {
-  local file="$1" line m rest n=0; shift
+  local file="$1" line m rest n=0 size cut; shift
   [ -L "$file" ] && return 0
   [ -f "$file" ] && [ -r "$file" ] || return 0
-  while [ "$n" -lt 64 ] && { IFS= read -r line || [ -n "$line" ]; }; do
+  size=$(( $(head -c 4097 -- "$file" 2>/dev/null | wc -c) ))
+  while [ "$n" -lt 64 ]; do
+    cut=0
+    if IFS= read -r line; then :
+    elif [ -n "$line" ]; then [ "$size" -le 4096 ] || cut=1
+    else break
+    fi
     n=$((n + 1))
-    line="${line#$'\xef\xbb\xbf'}"
+    if [ "$n" -eq 1 ]; then line="${line#$'\xef\xbb\xbf'}"; fi
     for m in "$@"; do
       [[ "$line" == "$m"* ]] || continue
       rest="${line#"$m"}"
       case "${rest:0:1}" in
-        ''|' '|$'\t'|$'\r'|$'\v'|$'\f'|:) printf '%s\n' "$m"; return 0 ;;
+        '') [ "$cut" = 0 ] && { printf '%s\n' "$m"; return 0; } ;;
+        ' '|$'\t'|$'\r'|$'\v'|$'\f'|:) printf '%s\n' "$m"; return 0 ;;
       esac
     done
-  done < <(head -c 4096 -- "$file" 2>/dev/null)
+  done < <(head -c 4097 -- "$file" 2>/dev/null)
   return 0
 }
 

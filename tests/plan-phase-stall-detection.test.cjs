@@ -1801,20 +1801,59 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     assert.equal(runHelpers(`gsd_return_marker ${q(fwd(link))}${m}`), '', 'a symlinked receipt is never read');
   });
 
+  // The cap is asserted by output (what is and is not read), never by elapsed time.
   test('gsd_return_marker reads at most the first 4096 bytes, so one huge line cannot stall the watch', (t) => {
     const f = fixture(t);
-    const m = ` ${q('## PLANNING COMPLETE')}`;
-    const run = (content) => {
+    const run = (content, marker = '## PLANNING COMPLETE') => {
       fs.writeFileSync(f.receipt, content);
-      const r = runBashScript(`${extractStallFunctionsBash()}\ngsd_return_marker ${q(fwd(f.receipt))}${m}\n`, [], { timeoutMs: PROBE_TIMEOUT_MS });
-      assert.equal(r.outcome, OUTCOME.EXITED, `the read must finish within ${PROBE_TIMEOUT_MS} ms (outcome ${r.outcome})`);
-      assert.equal(r.status, 0, r.stderr);
-      return r.stdout.trim();
+      return runHelpers(`gsd_return_marker ${q(fwd(f.receipt))} ${q(marker)}`);
     };
     assert.equal(run(`${'x'.repeat(4000)}\n## PLANNING COMPLETE\n`), '## PLANNING COMPLETE', 'a marker inside the first 4096 bytes is found');
     assert.equal(run(`${'x'.repeat(5000)}\n## PLANNING COMPLETE\n`), '', 'a marker past the first 4096 bytes is not read');
-    assert.equal(run(`${'a'.repeat(1000000)}\n`), '', 'a 1,000,000-byte line with no marker returns nothing, fast');
-    assert.equal(run(`## PLANNING COMPLETE ${'a'.repeat(1000000)}\n`), '## PLANNING COMPLETE', 'a marker opening a 1,000,000-byte line is still found, fast');
+    assert.equal(run(`${'a'.repeat(1000000)}\n## PLANNING COMPLETE\n`), '', 'a marker after a 1,000,000-byte line is not read');
+    assert.equal(run(`## PLANNING COMPLETE ${'a'.repeat(1000000)}\n`), '## PLANNING COMPLETE', 'a marker opening a 1,000,000-byte line is still found');
+  });
+
+  // Review 5563209291 Minor 4: limit-1 / limit / limit+1 for the 4096-byte cap. The marker
+  // (20 bytes) is placed so its last byte is byte 4095, 4096 or 4097 of the receipt.
+  test('gsd_return_marker byte cap: a marker ending at byte 4095 or 4096 is found, at 4097 it is not, and a word cut at the cap is not a marker', (t) => {
+    const f = fixture(t);
+    const run = (content, marker) => {
+      fs.writeFileSync(f.receipt, content);
+      return runHelpers(`gsd_return_marker ${q(fwd(f.receipt))} ${q(marker)}`);
+    };
+    const endingAt = (end, marker, after = '\n') => `${'x'.repeat(end - marker.length - 1)}\n${marker}${after}`;
+    const M = '## PLANNING COMPLETE';
+    const rows = [
+      [endingAt(4095, M), M, M, 'ends at byte 4095 (limit-1)'],
+      [endingAt(4096, M), M, M, 'ends at byte 4096 (limit)'],
+      [endingAt(4097, M), M, '', 'ends at byte 4097 (limit+1)'],
+      [endingAt(4096, M, ''), M, M, 'ends the file at byte 4096 with no newline'],
+      [endingAt(4097, M, ''), M, '', 'ends the file at byte 4097 with no newline'],
+      // A longer word straddling the cap: `## PLAN COMPLETE` ends at 4096 and `X` is byte
+      // 4097. Cutting at 4096 alone would read the marker; the boundary byte is read too.
+      [endingAt(4096, '## PLAN COMPLETE', 'X\n'), '## PLAN COMPLETE', '', 'a longer word cut at the cap'],
+      [endingAt(4096, '## PLAN COMPLETE', ' x\n'), '## PLAN COMPLETE', '## PLAN COMPLETE', 'control: a real boundary at byte 4097'],
+    ];
+    let ran = 0;
+    for (const [content, marker, expected, label] of rows) {
+      assert.equal(Buffer.byteLength(content.split('\n').slice(0, 2).join('\n')) >= 4095, true, `${label}: fixture length`);
+      assert.equal(run(content, marker), expected, label);
+      ran += 1;
+    }
+    assert.equal(ran, rows.length);
+  });
+
+  // Review 5563209291 Minor 6: only a BOM at the start of the file is stripped.
+  test('gsd_return_marker strips a BOM on line 1 only', (t) => {
+    const f = fixture(t);
+    const run = (content) => {
+      fs.writeFileSync(f.receipt, content);
+      return runHelpers(`gsd_return_marker ${q(fwd(f.receipt))} ${q('## ISSUES FOUND')}`);
+    };
+    assert.equal(run('\ufeff## ISSUES FOUND\n'), '## ISSUES FOUND', 'a leading BOM on line 1 is tolerated');
+    assert.equal(run('note\n\ufeff## ISSUES FOUND\n'), '', 'a BOM opening line 2 is not stripped, so the line does not start with the marker');
+    assert.equal(run('note\n## ISSUES FOUND\n'), '## ISSUES FOUND', 'control: the same line 2 without a BOM matches');
   });
 
   test('gsd_return_marker: a marker ends at end of line, whitespace, CR or a colon; `-x` or a letter is not a boundary', (t) => {
