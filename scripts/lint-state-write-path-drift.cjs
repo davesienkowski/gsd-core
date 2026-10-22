@@ -540,9 +540,11 @@ function isQuotedLiteralArg(arg) {
  *     `firstLine` is never cached.
  *     `linesRead` counts the lines read, `assignmentMatches` the assignment
  *     heads `assignedValue` decided on them.
- *     `readers` keeps each name's `nameReader`, built once; a line is
- *     then searched for the name in linear time and its regexes are tried
- *     only where it occurs.
+ *     `readers` keeps each name's `nameReader`, built once and charged
+ *     `READER_WORK` plus `READER_WORK_PER_CHAR` per character; a line is
+ *     then searched for the name and its regexes are tried only where it
+ *     occurs. A name longer than `MAX_RESOLVED_NAME_LENGTH` is charged as
+ *     the whole budget.
  *     `work` is the budget spent (`chargeWork`): each call charges
  *     `LOOKUP_WORK` plus the name's length, and each line read its
  *     `lineReadWork`. When a charge would pass `maxWork`, the scan stops
@@ -556,10 +558,18 @@ function nearestPrecedingAssignment(lines, index, varName, options = {}) {
   let reader = null;
   let known = null;
   if (cache) {
+    // A name longer than the cap is charged as the whole budget (fail closed).
+    if (varName.length > MAX_RESOLVED_NAME_LENGTH) {
+      chargeWork(cache, Infinity);
+      return null;
+    }
+    reader = cache.readers.get(varName);
+    if (!reader) {
+      if (!chargeWork(cache, READER_WORK + READER_WORK_PER_CHAR * varName.length)) return null;
+      cache.readers.set(varName, (reader = nameReader(varName, options.typed)));
+    }
     known = cache.byName.get(varName);
     if (!known) cache.byName.set(varName, (known = []));
-    reader = cache.readers.get(varName);
-    if (!reader) cache.readers.set(varName, (reader = nameReader(varName, options.typed)));
   }
   const assignRe = reader ? reader.head : assignmentHeadRegex(varName, options.typed);
   const own = options.firstLine !== undefined;
@@ -573,7 +583,8 @@ function nearestPrecedingAssignment(lines, index, varName, options = {}) {
     const line = own && i === index ? options.firstLine : lines[i];
     let positions;
     if (cache) {
-      positions = nameOccurrences(line, varName, reader.failure);
+      // Past this many occurrences the read cannot be charged, so stop there.
+      positions = nameOccurrences(line, varName, Math.floor((cache.maxWork - cache.work) / varName.length) + 1);
       if (!chargeWork(cache, lineReadWork(line, varName, positions))) return null;
       cache.linesRead++;
     }
@@ -664,7 +675,7 @@ function assignedValue(line, re, counter, positions) {
 // The work `nearestPrecedingAssignment` is charged for reading `line` for
 // `varName` under a cache budget (#5104), given the name's `occurrences` on
 // it. A line without the name costs its length plus `LINE_READ_WORK` (the
-// linear search, and the fixed cost of a read). On a line with it the regexes
+// search, and the fixed cost of a read). On a line with it the regexes
 // are tried at each occurrence, each try reading the name again, so it costs
 // its length plus `LINE_READ_WORK` plus occurrences x name length. Each of
 // those regexes can also start a scan to the end of the line at a `:` (a typed
@@ -684,44 +695,24 @@ function lineReadWork(line, varName, occurrences = nameOccurrences(line, varName
 
 // What `nearestPrecedingAssignment` keeps per name under a cache: the sticky
 // `assignmentHeadRegex` and pattern-binding regex, each tried only where the
-// name occurs, and the name's failure table for `nameOccurrences`.
+// name occurs. Building one is charged `READER_WORK` plus
+// `READER_WORK_PER_CHAR` per character of the name: compiling the regexes
+// takes far longer than a lookup, and each is kept for the rest of the file,
+// so the charge also bounds the memory they hold.
 function nameReader(varName, typed) {
   return {
     head: assignmentHeadRegex(varName, typed, 'y'),
     binds: patternBindingRegex(varName, 'y'),
-    failure: failureTable(varName),
   };
 }
 
-// The Knuth-Morris-Pratt failure table of `name`: entry `i` is the length of
-// the longest proper prefix of `name[0..i]` that is also its suffix.
-function failureTable(name) {
-  const failure = new Int32Array(name.length);
-  for (let i = 1, k = 0; i < name.length; i++) {
-    const c = name.charCodeAt(i);
-    while (k > 0 && c !== name.charCodeAt(k)) k = failure[k - 1];
-    if (c === name.charCodeAt(k)) k++;
-    failure[i] = k;
-  }
-  return failure;
-}
-
-// Every offset where `name` occurs on `line`, overlapping ones included, in
-// time linear in the line (Knuth-Morris-Pratt). `String#includes` is not
-// linear for every name: one with a repeated half takes line length x name
-// length on a line of the repeated character.
-function nameOccurrences(line, name, failure = failureTable(name)) {
+// Every offset where `name` occurs on `line`, overlapping ones included, or
+// the first `limit` of them. Each search can take time up to the name's
+// length per character of the line it passes, which
+// `MAX_RESOLVED_NAME_LENGTH` bounds.
+function nameOccurrences(line, name, limit = Infinity) {
   const out = [];
-  const n = name.length;
-  for (let i = 0, k = 0; i < line.length; i++) {
-    const c = line.charCodeAt(i);
-    while (k > 0 && c !== name.charCodeAt(k)) k = failure[k - 1];
-    if (c === name.charCodeAt(k)) k++;
-    if (k === n) {
-      out.push(i - n + 1);
-      k = failure[k - 1];
-    }
-  }
+  for (let p = line.indexOf(name); p !== -1 && out.length < limit; p = line.indexOf(name, p + 1)) out.push(p);
   return out;
 }
 
@@ -733,6 +724,19 @@ function nameOccurrences(line, name, failure = failureTable(name)) {
 // charged.
 const LINE_READ_WORK = 32;
 const LOOKUP_WORK = 64;
+// The work charged for building a name's `nameReader`, fixed and per
+// character of the name. Measured: about 70 us and 7 KB for a 4-character
+// name, 350 us and 30 KB for a 256-character one.
+const READER_WORK = 10000;
+const READER_WORK_PER_CHAR = 128;
+
+// The longest name Axis 2 resolves (#5104). A longer one is charged as the
+// whole budget, so its write and every later write in the file are reported
+// unresolved. It bounds the cost of a name search and the size of a
+// `nameReader`. Over the 1728 tracked script and source files the longest
+// name the resolver looks up is 32 characters (27 in `src/`), and the
+// longest identifier in `src/` is 52.
+const MAX_RESOLVED_NAME_LENGTH = 256;
 
 // A `for (const|let|var <pattern> of …)` loop header, or a `const|let|var`
 // destructuring declaration: each binds a name WITHOUT a `name =` that
@@ -909,16 +913,17 @@ const MAX_RAW_WRITE_TEXT_LENGTH = 4096;
 
 // The most work Axis 2 spends resolving the writes of one file (#5104): the
 // characters of each write's argument and of its line before the call, each
-// `nearestPrecedingAssignment` call (`LOOKUP_WORK` plus the name), each line
-// it reads (`lineReadWork`), and each assignment's right-hand side read
-// (`assignmentVerdict`). Once spent, nothing more is read: the write that ran
+// `nearestPrecedingAssignment` call (`LOOKUP_WORK` plus the name), each
+// name's reader built (`READER_WORK` plus `READER_WORK_PER_CHAR` per
+// character), each line it reads (`lineReadWork`), and each assignment's
+// right-hand side read (`assignmentVerdict`). A name longer than
+// `MAX_RESOLVED_NAME_LENGTH` is charged as the whole budget. Once spent, nothing more is read: the write that ran
 // out and every later write in the file not yet found to name the state path
 // are reported unresolved (`RAW_STATE_WRITE_UNRESOLVED`), never passed. Over
-// the 1728 tracked script and source files the most any file takes is 8267472
-// (`tests/state.test.cjs`, 1 MB); in `src/` it is 163185
-// (`src/commands.cts`). So this is over 30 times the first and over 1500
-// times the second. On the hostile files probed that spend it all, a file
-// took at most about 2.5 s (under 10 ns a unit, the linear pass included).
+// the 1728 tracked script and source files the most any file takes is 9315920
+// (`tests/state.test.cjs`, 1 MB); in `src/` it is 308033
+// (`src/commands.cts`). So this is over 25 times the first and over 800
+// times the second.
 const MAX_RAW_WRITE_RESOLVER_WORK = 250000000;
 
 // How Axis 2 reads an assignment through `nearestPrecedingAssignment` (#5104).
@@ -1147,10 +1152,12 @@ function boundaryAfterLine(write, index) {
  * Budget, fail closed: the work of resolving a file's writes is charged
  * against `MAX_RAW_WRITE_RESOLVER_WORK`: each write's argument and line
  * before the call, by length; each `nearestPrecedingAssignment` call; each
- * line it reads, by `lineReadWork`, which bounds the steps a read takes even
+ * name's reader, once (its regexes are compiled and kept for the file, so the
+ * charge bounds their memory too); each line it reads, by `lineReadWork`, which bounds the steps a read takes even
  * when the line repeats a declaration or `for` header of the name; and each
  * right-hand side read, which `assignmentVerdict` keeps for later writes so
- * a wide one is not read once per write. A charge that would
+ * a wide one is not read once per write. A name longer than
+ * `MAX_RESOLVED_NAME_LENGTH` is charged as the whole budget. A charge that would
  * pass the budget is not made and its read not done. The write that ran out
  * and every later write in the file not yet found to name the state path are
  * reported as `RAW_STATE_WRITE_UNRESOLVED`, at most once per line, so the
@@ -1163,14 +1170,15 @@ function boundaryAfterLine(write, index) {
  * With both caps, a file costs time linear in its length (finding the calls,
  * counting lines) plus work bounded by the budget.
  *
- * `stats`, optional, receives six counts over every write in `text`:
+ * `stats`, optional, receives seven counts over every write in `text`:
  * `assignmentLookups`, the `nearestPrecedingAssignment` calls, `linesRead`,
  * the lines those calls read, `assignmentMatches`, the assignment heads
  * decided on those lines (each in constant time once matched),
  * `argumentChars`, the characters `captureFirstArg` read (the target text
  * that `targetsStatePath` and `identifiersIn` then read), and `ownLineChars`,
  * the characters of each write's line before the call, counted at each read,
- * and `resolverWork`, the work charged against the budget.
+ * `resolverWork`, the work charged against the budget, and `readersBuilt`,
+ * the names a `nameReader` was built for.
  * A test seam that bounds the work without a clock; `collect` passes none.
  * Each call overwrites the counts. Anything but an object (`null`,
  * `undefined`) receives nothing.
@@ -1265,6 +1273,7 @@ function findRawStateWrites(rel, text, stats) {
     stats.argumentChars = argumentChars;
     stats.ownLineChars = ownLineChars;
     stats.resolverWork = bindings.work;
+    stats.readersBuilt = bindings.readers.size;
   }
   return out;
 }
@@ -1653,6 +1662,9 @@ module.exports = {
   MAX_TARGET_RESOLUTION_HOPS,
   MAX_RAW_WRITE_TEXT_LENGTH,
   MAX_RAW_WRITE_RESOLVER_WORK,
+  MAX_RESOLVED_NAME_LENGTH,
+  READER_WORK,
+  READER_WORK_PER_CHAR,
   LOOKUP_WORK,
   lineReadWork,
   findOpaqueStateTransforms,

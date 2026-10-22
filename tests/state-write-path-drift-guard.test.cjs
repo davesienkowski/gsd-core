@@ -879,8 +879,9 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     const { MAX_RAW_WRITE_TEXT_LENGTH: MAX } = guard;
     assert.ok(Number.isInteger(MAX) && MAX > 'statePath'.length, 'MAX_RAW_WRITE_TEXT_LENGTH is exported');
     const reasons = (text) => findRawStateWrites(OTHER_FILE, text).map((f) => [f.line, f.reason]);
-    // An unassigned name: resolved and not reported up to the cap.
-    const named = (len) => W(`  fs.writeFileSync(${'a'.repeat(len)}, c);`);
+    // An unassigned name, padded with spaces: resolved and not reported up to
+    // the cap.
+    const named = (len) => W(`  fs.writeFileSync(a${' '.repeat(len - 1)}, c);`);
     assert.deepStrictEqual(reasons(named(MAX - 1)), []);
     assert.deepStrictEqual(reasons(named(MAX)), []);
     assert.deepStrictEqual(reasons(named(MAX + 1)), [[2, REASON.RAW_STATE_WRITE_UNRESOLVED]]);
@@ -1047,11 +1048,14 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     const perWrite = (work(2 * W1) - work(W1)) / W1;
     assert.ok(perWrite > 0 && perWrite < rhs.length / 4, `${perWrite} work per write, right-hand side ${rhs.length}`);
     // The one read of a right-hand side is charged: with a single name in it,
-    // its line read and its right-hand side read are most of the work.
+    // its line read, its right-hand side read and the two readers (`p`, `a`)
+    // are most of the work.
+    const { READER_WORK } = guard;
     const same = Array(2000).fill('a').join(' + ');
     const stats = {};
     findRawStateWrites(OTHER_FILE, W(`  let p = ${same};`, '  fs.writeFileSync(p, c);'), stats);
-    assert.ok(stats.resolverWork >= 2 * same.length, `${stats.resolverWork} work, right-hand side ${same.length}`);
+    const floor = 2 * same.length + stats.readersBuilt * READER_WORK;
+    assert.ok(stats.resolverWork >= floor, `${stats.resolverWork} work, floor ${floor}`);
   });
 
   // Counted, not timed. Past a body boundary a write walks every earlier
@@ -1089,11 +1093,42 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     const small = run(200, 20000, 1, 1);
     assert.deepStrictEqual(small.out, []);
     assert.ok(small.stats.resolverWork >= (20000 - 200 + 1) * 200, `${small.stats.resolverWork} work`);
-    // The review's shape, shortened: each read would pass the budget, so no
+    // The review's shape, shortened: its 4000-character names are longer than
+    // MAX_RESOLVED_NAME_LENGTH, so each is charged as the whole budget, no
     // line is read and every write is reported.
     const big = run(4000, 100000, 2, 2);
     assert.ok(big.stats.resolverWork <= MAX, `${big.stats.resolverWork} work`);
     assert.deepStrictEqual(big.out.map((f) => f.reason), [REASON.RAW_STATE_WRITE_UNRESOLVED, REASON.RAW_STATE_WRITE_UNRESOLVED]);
+  });
+
+  // A name's regexes are compiled once per file (its reader), which takes far
+  // longer than a lookup and is kept for the file, so building one is charged.
+  // Counted, not timed.
+  test('bound: each distinct name builds one reader, charged by its length, short or long', () => {
+    const { READER_WORK, READER_WORK_PER_CHAR } = guard;
+    assert.ok(Number.isInteger(READER_WORK) && READER_WORK > 0 && Number.isInteger(READER_WORK_PER_CHAR), 'reader charges are exported');
+    for (const L of [6, 200]) {
+      const N = 100;
+      const name = (k) => `n${k}_`.padEnd(L, 'x');
+      const body = [];
+      for (let k = 0; k < N; k++) body.push(`  ${name(k)} = q;`, `  fs.writeFileSync(${name(k)}, c);`);
+      const stats = {};
+      assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, W(...body), stats), []);
+      assert.strictEqual(stats.readersBuilt, N + 1, 'one reader per written name, and one for q');
+      const readers = N * (READER_WORK + READER_WORK_PER_CHAR * L) + READER_WORK + READER_WORK_PER_CHAR;
+      assert.ok(stats.resolverWork >= readers, `L=${L}: ${stats.resolverWork} work, readers ${readers}`);
+    }
+  });
+
+  test('cap: a name of MAX_RESOLVED_NAME_LENGTH - 1 or exactly MAX characters is resolved, one more spends the budget and is reported unresolved', () => {
+    const { MAX_RESOLVED_NAME_LENGTH: MAX } = guard;
+    assert.ok(Number.isInteger(MAX) && MAX > 0, 'MAX_RESOLVED_NAME_LENGTH is exported');
+    const reasons = (text) => findRawStateWrites(OTHER_FILE, text).map((f) => [f.line, f.reason]);
+    const named = (len) => W(`  fs.writeFileSync(${'a'.repeat(len)}, c);`, '  fs.writeFileSync(q, c);');
+    assert.deepStrictEqual(reasons(named(MAX - 1)), []);
+    assert.deepStrictEqual(reasons(named(MAX)), []);
+    // The write with the long name, and the later one, are reported.
+    assert.deepStrictEqual(reasons(named(MAX + 1)), [[2, REASON.RAW_STATE_WRITE_UNRESOLVED], [3, REASON.RAW_STATE_WRITE_UNRESOLVED]]);
   });
 
   test('budget: once it is spent, every later write in the file is reported, and earlier verdicts stand', () => {
