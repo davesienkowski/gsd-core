@@ -872,6 +872,81 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, text), expected);
   });
 
+  // The cap on one write's own text, MAX_RAW_WRITE_TEXT_LENGTH: its first
+  // argument, and its line before the call. Past it the write is reported
+  // unresolved, never passed (fail closed).
+  test('cap: a first argument of MAX_RAW_WRITE_TEXT_LENGTH - 1 or exactly MAX characters is resolved, one more is reported unresolved', () => {
+    const { MAX_RAW_WRITE_TEXT_LENGTH: MAX } = guard;
+    assert.ok(Number.isInteger(MAX) && MAX > 'statePath'.length, 'MAX_RAW_WRITE_TEXT_LENGTH is exported');
+    const reasons = (text) => findRawStateWrites(OTHER_FILE, text).map((f) => [f.line, f.reason]);
+    // An unassigned name: resolved and not reported up to the cap.
+    const named = (len) => W(`  fs.writeFileSync(${'a'.repeat(len)}, c);`);
+    assert.deepStrictEqual(reasons(named(MAX - 1)), []);
+    assert.deepStrictEqual(reasons(named(MAX)), []);
+    assert.deepStrictEqual(reasons(named(MAX + 1)), [[2, REASON.RAW_STATE_WRITE_UNRESOLVED]]);
+    // The state path: reported either way, unresolved past the cap.
+    const state = (len) => W(`  fs.writeFileSync(statePath${' '.repeat(len - 'statePath'.length)}, c);`);
+    assert.deepStrictEqual(reasons(state(MAX - 1)), [[2, REASON.RAW_STATE_WRITE]]);
+    assert.deepStrictEqual(reasons(state(MAX)), [[2, REASON.RAW_STATE_WRITE]]);
+    assert.deepStrictEqual(reasons(state(MAX + 1)), [[2, REASON.RAW_STATE_WRITE_UNRESOLVED]]);
+    // A call left open at the end of the file reads what is left, as before.
+    assert.deepStrictEqual(reasons('function w(c) {\n  fs.writeFileSync(\n'), []);
+  });
+
+  test('cap: a line holding MAX_RAW_WRITE_TEXT_LENGTH - 1 or exactly MAX characters before the call is resolved, one more is reported unresolved', () => {
+    const { MAX_RAW_WRITE_TEXT_LENGTH: MAX } = guard;
+    const reasons = (text) => findRawStateWrites(OTHER_FILE, text).map((f) => [f.line, f.reason]);
+    const before = (len, target) => W(`${' '.repeat(len)}fs.writeFileSync(${target}, c);`);
+    assert.deepStrictEqual(reasons(before(MAX - 1, 'q')), []);
+    assert.deepStrictEqual(reasons(before(MAX, 'q')), []);
+    assert.deepStrictEqual(reasons(before(MAX + 1, 'q')), [[2, REASON.RAW_STATE_WRITE_UNRESOLVED]]);
+    assert.deepStrictEqual(reasons(before(MAX, 'statePath')), [[2, REASON.RAW_STATE_WRITE]]);
+    assert.deepStrictEqual(reasons(before(MAX + 1, 'statePath')), [[2, REASON.RAW_STATE_WRITE_UNRESOLVED]]);
+  });
+
+  // Counted, not timed: `stats.argumentChars` is the characters the argument
+  // capture read, which `targetsStatePath` and `identifiersIn` then read
+  // again. Without the cap, each call left open read the rest of the file.
+  test('bound: calls left open, one per line, read at most MAX_RAW_WRITE_TEXT_LENGTH + 1 argument characters each, and are reported', () => {
+    const { MAX_RAW_WRITE_TEXT_LENGTH: MAX } = guard;
+    const N = 1000;
+    const text = 'function f(){\n' + 'fs.writeFileSync(\n'.repeat(N) + '}';
+    const stats = {};
+    const out = findRawStateWrites(OTHER_FILE, text, stats);
+    assert.strictEqual(typeof stats.argumentChars, 'number', 'findRawStateWrites reports argumentChars');
+    assert.ok(stats.argumentChars > 0, 'the seam counts argument characters');
+    assert.ok(stats.argumentChars <= N * (MAX + 1), `${stats.argumentChars} argument characters, bound ${N * (MAX + 1)}`);
+    // Every call whose remaining text is longer than the cap is reported, once.
+    const open = [...text.matchAll(/fs\.writeFileSync\(/g)].map((c) => c.index + c[0].length);
+    const expected = open.filter((start) => text.length - start > MAX).map((start) => text.slice(0, start).split('\n').length);
+    assert.ok(expected.length > 0 && expected[0] === 2, 'the fixture holds calls past the cap');
+    assert.deepStrictEqual(out.map((f) => f.line), expected);
+    assert.ok(out.every((f) => f.reason === REASON.RAW_STATE_WRITE_UNRESOLVED));
+  });
+
+  // Counted, not timed: `stats.ownLineChars` is the characters of each
+  // write's line before the call, counted at each read (the cut, then once per
+  // name looked up from the write's own line; here only `p`). Without the cap,
+  // each of the writes re-read the whole line before it.
+  test('bound: many writes on one line read at most MAX_RAW_WRITE_TEXT_LENGTH characters of the line before each call, and the line is reported unresolved once', () => {
+    const { MAX_RAW_WRITE_TEXT_LENGTH: MAX } = guard;
+    const N = 2000;
+    const many = (value) => W(`  let p = ${value};`, '  { }', '  ' + 'fs.writeFileSync(p, c); '.repeat(N));
+    const stats = {};
+    const out = findRawStateWrites(OTHER_FILE, many("path.join(dir, 'notes')"), stats);
+    assert.strictEqual(typeof stats.ownLineChars, 'number', 'findRawStateWrites reports ownLineChars');
+    assert.ok(stats.ownLineChars > 0, 'the seam counts own-line characters');
+    assert.ok(stats.ownLineChars <= 2 * N * MAX, `${stats.ownLineChars} own-line characters, bound ${2 * N * MAX}`);
+    assert.ok(stats.argumentChars <= N * (MAX + 1), `${stats.argumentChars} argument characters`);
+    assert.deepStrictEqual(out.map((f) => [f.line, f.reason]), [[4, REASON.RAW_STATE_WRITE_UNRESOLVED]]);
+    // With a STATE.md target, the writes within the cap are still reported
+    // as raw writes: the cap adds a finding, it does not drop one.
+    const state = findRawStateWrites(OTHER_FILE, many('statePath'));
+    assert.ok(state.filter((f) => f.reason === REASON.RAW_STATE_WRITE).length > 0);
+    assert.strictEqual(state.filter((f) => f.reason === REASON.RAW_STATE_WRITE_UNRESOLVED).length, 1);
+    assert.ok(state.every((f) => f.line === 4));
+  });
+
   test('control: a variable assigned from a non-STATE.md literal, or a loop over an unrelated list, is NOT reported', () => {
     assert.deepStrictEqual(lines(W("  const p = path.join(dir, 'ROADMAP.md');", '  fs.writeFileSync(p, c);')), []);
     assert.deepStrictEqual(lines(W('  for (const f of files) {', '    fs.writeFileSync(f, c);', '  }')), []);
@@ -1243,5 +1318,27 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
       .filter((f) => f.file === 'src/bogus.cts' && f.reason === REASON.RAW_STATE_WRITE)
       .map((f) => f.line);
     assert.deepStrictEqual(reported, [5, 12]);
+  });
+
+  test('CLI: --root <synthetic tree> with a call left open fails the run as an unresolved raw write', (t) => {
+    const tmpRoot = createTempDir('state-write-path-drift-guard-5104-open-');
+    t.after(() => cleanup(tmpRoot));
+
+    const srcDir = path.join(tmpRoot, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    // No `,` or `)` closes the call before the cap.
+    const filler = Array(Math.ceil(guard.MAX_RAW_WRITE_TEXT_LENGTH / 8)).fill('    x +');
+    const fixtureContent = ["import * as fs from 'node:fs';", 'function open(): void {', '  fs.writeFileSync(', ...filler, '}'].join('\n');
+    fs.writeFileSync(path.join(srcDir, 'bogus.cts'), fixtureContent, 'utf8');
+
+    const result = runNode([GUARD_PATH, '--root', tmpRoot, '--json'], { cwd: REPO_ROOT, timeoutMs: PROBE_TIMEOUT_MS });
+    assert.strictEqual(result.outcome, 'exited');
+    assert.strictEqual(result.exitCode, 1);
+
+    const body = JSON.parse(result.stdout);
+    assert.strictEqual(body.ok, false);
+    assert.ok(body.summary.rawWriteViolations > 0);
+    const reasons = new Set(body.findings.filter((f) => f.file === 'src/bogus.cts').map((f) => f.reason));
+    assert.deepStrictEqual([...reasons], [REASON.RAW_STATE_WRITE_UNRESOLVED]);
   });
 });

@@ -71,7 +71,9 @@
  *   module is always one `import` away — so this axis stays a plain
  *   string-match scan, unratcheted: any occurrence is a violation, because no
  *   legitimate call site in this codebase writes STATE.md this way (every
- *   real writer goes through `platformWriteSync`). This axis's zero does NOT
+ *   real writer goes through `platformWriteSync`). A call too long to resolve
+ *   (`MAX_RAW_WRITE_TEXT_LENGTH`) is reported too, as
+ *   `RAW_STATE_WRITE_UNRESOLVED`. This axis's zero does NOT
  *   prove that no raw STATE.md writer remains: it is a line scan, and
  *   `findRawStateWrites`'s own header lists the verified shapes it misses
  *   (ADR-3408 Decision 5; the syntax-tree follow-up is #5279).
@@ -167,6 +169,11 @@ const REASON = Object.freeze({
   // Axis 2 (§8.6, retained): a raw `fs.writeFileSync(` call targeting the
   // state path — see `findRawStateWrites`.
   RAW_STATE_WRITE: 'raw_state_write',
+  // Axis 2 (#5104): a raw `fs.writeFileSync(` call too long to resolve within
+  // `MAX_RAW_WRITE_TEXT_LENGTH` (a call left open, or a line of many writes).
+  // Reported without resolution, so the cap fails closed. See
+  // `findRawStateWrites`.
+  RAW_STATE_WRITE_UNRESOLVED: 'raw_state_write_unresolved',
   // ADR-4629 §8.1 (epic #4629, C1): a residual `readModifyWriteStateMd(path,
   // (content) => …)` call whose transform is an inline anonymous arrow/function
   // — the opaque shape §8.1 replaces with a declared StateWriteIntent. Recognized
@@ -708,12 +715,18 @@ const RAW_WRITE_CALL_START_RE = /\bfs\.writeFileSync\s*\(/g;
  * `line` may span several lines: `findRawStateWrites` passes the whole
  * comment-stripped file, so a call wrapped after its `(` is captured too
  * (#5104).
+ *
+ * `limit`, optional, bounds the scan: it reads and returns at most
+ * `limit + 1` characters (a backslash's escaped character is skipped, not
+ * returned), so a result longer than `limit` means the argument is longer
+ * than `limit` (a call left open takes the rest of the text). The caller
+ * decides what that means.
  */
-function captureFirstArg(line, startIdx) {
+function captureFirstArg(line, startIdx, limit = Infinity) {
   let depth = 0;
   let inStr = null;
   let i = startIdx;
-  for (; i < line.length; i++) {
+  for (; i < line.length && i - startIdx <= limit; i++) {
     const c = line[i];
     if (inStr) {
       if (c === '\\') { i++; continue; }
@@ -729,7 +742,7 @@ function captureFirstArg(line, startIdx) {
     }
     if (c === ',' && depth === 0) break;
   }
-  return line.slice(startIdx, i);
+  return line.slice(startIdx, Math.min(i, startIdx + limit + 1));
 }
 
 // True when the captured target-path expression plausibly names the STATE.md
@@ -748,6 +761,17 @@ function targetsStatePath(arg) {
 // identifier of a right-hand side, so `resolvesToStatePath` memoizes each
 // name's verdict (see there).
 const MAX_TARGET_RESOLUTION_HOPS = 4;
+
+// The most characters Axis 2 reads of one write's own text before it gives up
+// on resolving that write (#5104): its first argument, and its line before
+// the call. Past either, the write is reported unresolved
+// (`RAW_STATE_WRITE_UNRESOLVED`), never passed. Without it a call left open
+// took the rest of the file as its target, once per call, and each of many
+// writes on one line re-read the line before it. Over the 1715 tracked
+// script and source files, the longest first argument of a write is 115
+// characters and the longest line before a call 129 (35 and 103 in `src/`),
+// so this is over 30 times either.
+const MAX_RAW_WRITE_TEXT_LENGTH = 4096;
 
 // How Axis 2 reads an assignment through `nearestPrecedingAssignment` (#5104).
 const RAW_WRITE_ASSIGNMENT_OPTIONS = Object.freeze({ typed: true, stopAtPatternBinding: true, withLine: true });
@@ -835,6 +859,7 @@ function nameResolvesToStatePath(write, index, name, hopsLeft) {
   let verdict = false;
   for (let from = index; from >= 0; ) {
     write.assignmentLookups++;
+    if (from === write.line) write.ownLineChars += write.ownLine.length;
     const found = nearestPrecedingAssignment(write.lines, from, name, {
       ...RAW_WRITE_ASSIGNMENT_OPTIONS,
       cache: write.bindings,
@@ -917,20 +942,37 @@ function boundaryAfterLine(write, index) {
  * `bindings` cache) and each write's own line once per name it resolves. A
  * long run of whitespace, with or without a line terminator `.` does not
  * match after it, costs a read time linear in the line (`assignedValue`,
- * `LOOP_BINDING_RE`). Not bounded here, each quadratic in one line's length:
- * a line that holds many writes, read once per write; a call left open
- * (`fs.writeFileSync(` with no closing paren), which takes the rest of the
- * file as its target for every such call; and a line that repeats a
- * declaration or `for` header of the name many times, where each repeat
- * scans on to the end of the line.
+ * `LOOP_BINDING_RE`).
  *
- * `stats`, optional, receives three counts over every write in `text`:
+ * Cap, fail closed: a write is not resolved when its first argument runs
+ * past `MAX_RAW_WRITE_TEXT_LENGTH` characters with no top-level `,` or `)`
+ * (a call left open, which would take the rest of the file as its target),
+ * or when its line holds more than that many characters before the call (a
+ * line of many writes, each of which would re-read the line before it). It
+ * is reported as `RAW_STATE_WRITE_UNRESOLVED` instead, at most once per line,
+ * so the cap can add reports but never drop one. Each write then reads at
+ * most `MAX_RAW_WRITE_TEXT_LENGTH + 1` characters of its argument, and at
+ * most `MAX_RAW_WRITE_TEXT_LENGTH` characters of its line before the call,
+ * a fixed number of times plus once per name it resolves. A finding's
+ * `source` is built once per line.
+ *
+ * Not bounded here: a line that repeats a declaration or `for` header of the
+ * name many times, where each repeat scans on to the end of the line
+ * (quadratic in that line's length, once per name that reads the line); and
+ * many writes that each name a different variable, where each name's first
+ * lookup reads back to the enclosing named function (distinct names x
+ * lines).
+ *
+ * `stats`, optional, receives five counts over every write in `text`:
  * `assignmentLookups`, the `nearestPrecedingAssignment` calls, `linesRead`,
- * the lines those calls read, and `assignmentMatches`, the assignment heads
- * decided on those lines (each in constant time once matched). A test seam
- * that bounds the work without a clock; `collect` passes none. Each call
- * overwrites the counts. Anything but an object (`null`, `undefined`)
- * receives nothing.
+ * the lines those calls read, `assignmentMatches`, the assignment heads
+ * decided on those lines (each in constant time once matched),
+ * `argumentChars`, the characters `captureFirstArg` read (the target text
+ * that `targetsStatePath` and `identifiersIn` then read), and `ownLineChars`,
+ * the characters of each write's line before the call, counted at each read.
+ * A test seam that bounds the work without a clock; `collect` passes none.
+ * Each call overwrites the counts. Anything but an object (`null`,
+ * `undefined`) receives nothing.
  */
 function findRawStateWrites(rel, text, stats) {
   const rawLines = text.split('\n');
@@ -941,7 +983,24 @@ function findRawStateWrites(rel, text, stats) {
   const bindings = { byName: new Map(), linesRead: 0, assignmentMatches: 0 };
   const verdicts = new Map();
   let assignmentLookups = 0;
+  let argumentChars = 0;
+  let ownLineChars = 0;
   const out = [];
+  // `file`/`source` sanitized for the same fork-PR reason as every other
+  // finding in this guard. A line's `source` is built once, however many
+  // findings it holds.
+  const sources = new Map();
+  const report = (reason, index) => {
+    let source = sources.get(index);
+    if (source === undefined) sources.set(index, (source = sanitizeForReport(rawLines[index].trim())));
+    out.push({ reason, axis: 'raw-write', file: sanitizeForReport(rel), line: index + 1, source });
+  };
+  let unresolvedLine = -1;
+  const reportUnresolved = (index) => {
+    if (unresolvedLine === index) return;
+    unresolvedLine = index;
+    report(REASON.RAW_STATE_WRITE_UNRESOLVED, index);
+  };
   let lineIdx = 0;
   let lineStart = 0;
   let counted = 0;
@@ -954,12 +1013,25 @@ function findRawStateWrites(rel, text, stats) {
         lineStart = counted + 1;
       }
     }
-    const targetArg = captureFirstArg(joined, m.index + m[0].length).trim();
+    // The cap (see above): the line before the call is measured before it is
+    // read, and the argument read stops one character past the cap.
+    if (m.index - lineStart > MAX_RAW_WRITE_TEXT_LENGTH) {
+      reportUnresolved(lineIdx);
+      continue;
+    }
+    const rawArg = captureFirstArg(joined, m.index + m[0].length, MAX_RAW_WRITE_TEXT_LENGTH);
+    argumentChars += rawArg.length;
+    if (rawArg.length > MAX_RAW_WRITE_TEXT_LENGTH) {
+      reportUnresolved(lineIdx);
+      continue;
+    }
+    const targetArg = rawArg.trim();
     // The write's own line is read up to the call. When that text holds a
     // named-function header (a one-line nested function), it is dropped
     // instead, so the header does not end the scan: the write may read its
     // enclosing function's variable.
     const cut = joined.slice(lineStart, m.index);
+    ownLineChars += cut.length;
     const ownLine = FUNCTION_DECL_LINE_RE.test(cut) ? '' : cut;
     const write = {
       lines: stripped,
@@ -971,24 +1043,19 @@ function findRawStateWrites(rel, text, stats) {
       verdicts,
       memo: new Map(),
       assignmentLookups: 0,
+      ownLineChars: 0,
     };
     const hit = resolvesToStatePath(write, lineIdx, targetArg, MAX_TARGET_RESOLUTION_HOPS);
     assignmentLookups += write.assignmentLookups;
-    if (!hit) continue;
-    // `file`/`source` sanitized for the same fork-PR reason as every other
-    // finding in this guard.
-    out.push({
-      reason: REASON.RAW_STATE_WRITE,
-      axis: 'raw-write',
-      file: sanitizeForReport(rel),
-      line: lineIdx + 1,
-      source: sanitizeForReport(rawLines[lineIdx].trim()),
-    });
+    ownLineChars += write.ownLineChars;
+    if (hit) report(REASON.RAW_STATE_WRITE, lineIdx);
   }
   if (stats !== null && typeof stats === 'object') {
     stats.assignmentLookups = assignmentLookups;
     stats.linesRead = bindings.linesRead;
     stats.assignmentMatches = bindings.assignmentMatches;
+    stats.argumentChars = argumentChars;
+    stats.ownLineChars = ownLineChars;
   }
   return out;
 }
@@ -1375,6 +1442,7 @@ module.exports = {
   findRawStateWrites,
   targetsStatePath,
   MAX_TARGET_RESOLUTION_HOPS,
+  MAX_RAW_WRITE_TEXT_LENGTH,
   findOpaqueStateTransforms,
   captureCallArgList,
   findCompositionBypasses,
