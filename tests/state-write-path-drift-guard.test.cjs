@@ -851,7 +851,7 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
   // bounds the matches tried, not the steps inside one; verdicts are pinned.
   test('bound: a run after `=` ending in \\r or U+2028 decides each assignment head once', () => {
     const ws = ' '.repeat(4000);
-    for (const end of ['\r', ' ']) {
+    for (const end of ['\r', '\u2028']) {
       const unread = W(`  const p =${ws}x;${end}`, '  p = p = p = p;' + end, '  fs.writeFileSync(p, c);');
       const stats = {};
       assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, unread, stats).map((f) => f.line), [], JSON.stringify(end));
