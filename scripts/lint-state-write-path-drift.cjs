@@ -72,7 +72,8 @@
  *   string-match scan, unratcheted: any occurrence is a violation, because no
  *   legitimate call site in this codebase writes STATE.md this way (every
  *   real writer goes through `platformWriteSync`). A call too long to resolve
- *   (`MAX_RAW_WRITE_TEXT_LENGTH`) is reported too, as
+ *   (`MAX_RAW_WRITE_TEXT_LENGTH`), or past the file's resolver budget
+ *   (`MAX_RAW_WRITE_RESOLVER_WORK`), is reported too, as
  *   `RAW_STATE_WRITE_UNRESOLVED`. This axis's zero does NOT
  *   prove that no raw STATE.md writer remains: it is a line scan, and
  *   `findRawStateWrites`'s own header lists the verified shapes it misses
@@ -170,8 +171,9 @@ const REASON = Object.freeze({
   // state path — see `findRawStateWrites`.
   RAW_STATE_WRITE: 'raw_state_write',
   // Axis 2 (#5104): a raw `fs.writeFileSync(` call too long to resolve within
-  // `MAX_RAW_WRITE_TEXT_LENGTH` (a call left open, or a line of many writes).
-  // Reported without resolution, so the cap fails closed. See
+  // `MAX_RAW_WRITE_TEXT_LENGTH` (a call left open, or a line of many writes),
+  // or reached after the file's `MAX_RAW_WRITE_RESOLVER_WORK` is spent.
+  // Reported without resolution, so the caps fail closed. See
   // `findRawStateWrites`.
   RAW_STATE_WRITE_UNRESOLVED: 'raw_state_write_unresolved',
   // ADR-4629 §8.1 (epic #4629, C1): a residual `readModifyWriteStateMd(path,
@@ -530,21 +532,34 @@ function isQuotedLiteralArg(arg) {
  *     caller can resume its scan above the assignment it followed.
  *   - `firstLine`: read this text in place of `lines[index]`. Axis 2 passes
  *     the write's own line cut at the call.
- *   - `cache`: a `{ byName, linesRead, assignmentMatches }` object shared by
+ *   - `cache`: a `{ byName, headRegex, linesRead, assignmentMatches, work,
+ *     maxWork, exhausted }` object shared by
  *     every call over the same `lines` with the same options. Each line is
  *     then read at most once per name: a scan stops at the first line whose
  *     result is cached, and records its result for every line it read.
  *     `firstLine` is never cached.
  *     `linesRead` counts the lines read, `assignmentMatches` the assignment
  *     heads `assignedValue` decided on them.
+ *     `headRegex` keeps each name's `assignmentHeadRegex`, built once.
+ *     `work` is the budget spent (`chargeWork`): each call charges
+ *     `LOOKUP_WORK` plus the name's length, and each line read its
+ *     `lineReadWork`. When a charge would pass `maxWork`, the scan stops
+ *     before the read, sets `exhausted` and returns `null` without caching
+ *     anything; every later call with the cache returns `null` at once. The
+ *     caller must then treat `null` as unknown, not as "no assignment".
  */
 function nearestPrecedingAssignment(lines, index, varName, options = {}) {
-  const assignRe = assignmentHeadRegex(varName, options.typed);
   const cache = options.cache;
+  if (cache && !chargeWork(cache, LOOKUP_WORK + varName.length)) return null;
+  let assignRe;
   let known = null;
   if (cache) {
     known = cache.byName.get(varName);
     if (!known) cache.byName.set(varName, (known = []));
+    assignRe = cache.headRegex.get(varName);
+    if (!assignRe) cache.headRegex.set(varName, (assignRe = assignmentHeadRegex(varName, options.typed)));
+  } else {
+    assignRe = assignmentHeadRegex(varName, options.typed);
   }
   const own = options.firstLine !== undefined;
   let result = null;
@@ -554,8 +569,11 @@ function nearestPrecedingAssignment(lines, index, varName, options = {}) {
       result = known[i];
       break;
     }
-    if (cache) cache.linesRead++;
     const line = own && i === index ? options.firstLine : lines[i];
+    if (cache) {
+      if (!chargeWork(cache, lineReadWork(line, varName))) return null;
+      cache.linesRead++;
+    }
     if (FUNCTION_DECL_LINE_RE.test(line)) break;
     if (!line.includes(varName)) continue; // a line without the name cannot bind it
     if (options.stopAtPatternBinding && bindsByPattern(line, varName)) break;
@@ -615,6 +633,34 @@ function assignedValue(line, re, counter) {
   }
   return null;
 }
+
+// The work `nearestPrecedingAssignment` is charged for reading `line` for
+// `varName` under a cache budget (#5104). A line without the name costs its
+// length plus `LINE_READ_WORK` (`includes`, and the fixed cost of a read).
+// A line with it is also matched by `assignmentHeadRegex` and
+// `bindsByPattern`, and each of those can start a scan to the end of the line
+// at a `:` (a typed head), a `(` (a `for` header) or a `[` or `{` (a
+// destructuring pattern), so it costs that, times one more than the count of
+// those characters. That bounds the steps the reads take, up to a constant
+// factor, however the line repeats a declaration or header.
+function lineReadWork(line, varName) {
+  if (!line.includes(varName)) return line.length + LINE_READ_WORK;
+  let starts = 1;
+  for (let k = 0; k < line.length; k++) {
+    const c = line[k];
+    if (c === ':' || c === '(' || c === '[' || c === '{') starts++;
+  }
+  return (line.length + LINE_READ_WORK) * starts;
+}
+
+// The fixed part of the work charged for one line read, and for one
+// `nearestPrecedingAssignment` call (plus the length of the name, which its
+// keys and regex hold), under a cache budget, in the units of one character
+// read (see `MAX_RAW_WRITE_RESOLVER_WORK`). Without them, reads of blank
+// lines and lookups that end in the cache cost far more time than they are
+// charged.
+const LINE_READ_WORK = 32;
+const LOOKUP_WORK = 64;
 
 // A `for (const|let|var <pattern> of …)` loop header, or a `const|let|var`
 // destructuring declaration: each binds a name WITHOUT a `name =` that
@@ -773,6 +819,21 @@ const MAX_TARGET_RESOLUTION_HOPS = 4;
 // so this is over 30 times either.
 const MAX_RAW_WRITE_TEXT_LENGTH = 4096;
 
+// The most work Axis 2 spends resolving the writes of one file (#5104): the
+// characters of each write's argument and of its line before the call, each
+// `nearestPrecedingAssignment` call (`LOOKUP_WORK` plus the name), each line
+// it reads (`lineReadWork`), and each assignment's right-hand side read
+// (`assignmentVerdict`). Once spent, nothing more is read: the write that ran
+// out and every later write in the file not yet found to name the state path
+// are reported unresolved (`RAW_STATE_WRITE_UNRESOLVED`), never passed. Over
+// the 1728 tracked script and source files the most any file takes is 8186334
+// (`tests/state.test.cjs`, 1 MB); in `src/` it is 160872
+// (`src/commands.cts`). So this is over 30 times the first and over 1500
+// times the second. Measured on hostile files that spend it all, the budget
+// costs 1 to 3 ns a unit, so well under a second a file on top of the linear
+// pass every file takes.
+const MAX_RAW_WRITE_RESOLVER_WORK = 250000000;
+
 // How Axis 2 reads an assignment through `nearestPrecedingAssignment` (#5104).
 const RAW_WRITE_ASSIGNMENT_OPTIONS = Object.freeze({ typed: true, stopAtPatternBinding: true, withLine: true });
 
@@ -829,7 +890,11 @@ const BODY_BOUNDARY_RE = /[{}]|=>/;
  *     and the lookups below the write's line are shared; without them,
  *     right-hand sides that each read many names branch exponentially in the
  *     hop bound. `assignmentLookups` counts the `nearestPrecedingAssignment`
- *     calls.
+ *     calls. `assignmentVerdict` keeps what one assignment below the write's
+ *     line gives in `verdicts` too, under the same flag (keys starting
+ *     `=`), so later writes do not read its right-hand side again.
+ *   - `ownLineChars` counts the characters of the write's line before the
+ *     call read by its lookups (the `stats` seam of `findRawStateWrites`).
  *
  * Unresolved is not flagged: a parameter, a name bound by a `for...of`
  * header or a destructuring declaration, or a chain longer than the bound.
@@ -866,22 +931,58 @@ function nameResolvesToStatePath(write, index, name, hopsLeft) {
       firstLine: from === write.line ? write.ownLine : undefined,
     });
     if (found === null) break;
-    if (resolvesToStatePath(write, found.line - 1, found.rhs, hopsLeft - 1)) {
+    const assigned = assignmentVerdict(write, name, found, hopsLeft);
+    if (assigned.hit) {
       verdict = true;
       break;
     }
-    if (!bodyBoundaryAfter(write, found)) break;
+    if (!assigned.rhsHasBoundary && !(found.line < write.line && boundaryAfterLine(write, found.line))) break;
     from = found.line - 1;
   }
   memo.set(key, verdict);
   return verdict;
 }
 
-// True when a body boundary lies between the assignment `found` (its
-// right-hand side, then every line after it) and the write's call.
-function bodyBoundaryAfter(write, found) {
-  if (BODY_BOUNDARY_RE.test(found.rhs)) return true;
-  return found.line < write.line && boundaryAfterLine(write, found.line);
+// What the assignment `found` of `name` gives `nameResolvesToStatePath`:
+// `hit`, whether its right-hand side resolves to the state path in
+// `hopsLeft - 1` more hops, and `rhsHasBoundary`, whether that right-hand
+// side holds a body boundary (the rest of the boundary rule is
+// `boundaryAfterLine`). Reading the right-hand side is charged to the file's
+// budget. Below the write's line the result depends on the write only through
+// the boundary flag after `found.line - 1`, as for `write.verdicts`, so it is
+// kept there under that flag and every later write reuses it instead of
+// reading the right-hand side again. When the budget is spent the result is
+// `{ hit: false, rhsHasBoundary: false }` and the write is reported
+// unresolved.
+function assignmentVerdict(write, name, found, hopsLeft) {
+  const key = found.line < write.line ? `=\0${name}\0${found.line}\0${hopsLeft}\0${boundaryAfterLine(write, found.line - 1)}` : null;
+  if (key !== null) {
+    const known = write.verdicts.get(key);
+    if (known !== undefined) return known;
+  }
+  let result = { hit: false, rhsHasBoundary: false };
+  if (chargeWork(write.bindings, found.rhs.length + 1)) {
+    result = {
+      hit: resolvesToStatePath(write, found.line - 1, found.rhs, hopsLeft - 1),
+      rhsHasBoundary: BODY_BOUNDARY_RE.test(found.rhs),
+    };
+  }
+  if (key !== null) write.verdicts.set(key, result);
+  return result;
+}
+
+// Adds `amount` to `budget.work` (a `nearestPrecedingAssignment` cache)
+// and returns true, unless the budget is spent or the sum would pass
+// `budget.maxWork`: then it sets `budget.exhausted` and returns false.
+function chargeWork(budget, amount) {
+  if (budget.exhausted) return false;
+  const work = budget.work + amount;
+  if (work > budget.maxWork) {
+    budget.exhausted = true;
+    return false;
+  }
+  budget.work = work;
+  return true;
 }
 
 // True when a body boundary lies on a line after `index` (below the write's
@@ -956,20 +1057,33 @@ function boundaryAfterLine(write, index) {
  * a fixed number of times plus once per name it resolves. A finding's
  * `source` is built once per line.
  *
- * Not bounded here: a line that repeats a declaration or `for` header of the
- * name many times, where each repeat scans on to the end of the line
- * (quadratic in that line's length, once per name that reads the line); and
- * many writes that each name a different variable, where each name's first
- * lookup reads back to the enclosing named function (distinct names x
- * lines).
+ * Budget, fail closed: the work of resolving a file's writes is charged
+ * against `MAX_RAW_WRITE_RESOLVER_WORK`: each write's argument and line
+ * before the call, by length; each `nearestPrecedingAssignment` call; each
+ * line it reads, by `lineReadWork`, which bounds the steps a read takes even
+ * when the line repeats a declaration or `for` header of the name; and each
+ * right-hand side read, which `assignmentVerdict` keeps for later writes so
+ * a wide one is not read once per write. A charge that would
+ * pass the budget is not made and its read not done. The write that ran out
+ * and every later write in the file not yet found to name the state path are
+ * reported as `RAW_STATE_WRITE_UNRESOLVED`, at most once per line, so the
+ * budget too can add reports but never drop one. Without it, many writes that
+ * each name a different variable read back to the enclosing named function
+ * once per name (distinct names x lines), a line that repeats a declaration
+ * scanned to its end once per repeat (quadratic in the line), each write
+ * re-read a shared right-hand side, and each write walked every earlier
+ * assignment of its name past a body boundary.
+ * With both caps, a file costs time linear in its length (finding the calls,
+ * counting lines) plus work bounded by the budget.
  *
- * `stats`, optional, receives five counts over every write in `text`:
+ * `stats`, optional, receives six counts over every write in `text`:
  * `assignmentLookups`, the `nearestPrecedingAssignment` calls, `linesRead`,
  * the lines those calls read, `assignmentMatches`, the assignment heads
  * decided on those lines (each in constant time once matched),
  * `argumentChars`, the characters `captureFirstArg` read (the target text
  * that `targetsStatePath` and `identifiersIn` then read), and `ownLineChars`,
- * the characters of each write's line before the call, counted at each read.
+ * the characters of each write's line before the call, counted at each read,
+ * and `resolverWork`, the work charged against the budget.
  * A test seam that bounds the work without a clock; `collect` passes none.
  * Each call overwrites the counts. Anything but an object (`null`,
  * `undefined`) receives nothing.
@@ -980,7 +1094,7 @@ function findRawStateWrites(rel, text, stats) {
   const joined = stripped.join('\n');
   const boundaryLinesBefore = [0];
   for (const line of stripped) boundaryLinesBefore.push(boundaryLinesBefore[boundaryLinesBefore.length - 1] + (BODY_BOUNDARY_RE.test(line) ? 1 : 0));
-  const bindings = { byName: new Map(), linesRead: 0, assignmentMatches: 0 };
+  const bindings = { byName: new Map(), headRegex: new Map(), linesRead: 0, assignmentMatches: 0, work: 0, maxWork: MAX_RAW_WRITE_RESOLVER_WORK, exhausted: false };
   const verdicts = new Map();
   let assignmentLookups = 0;
   let argumentChars = 0;
@@ -1013,15 +1127,21 @@ function findRawStateWrites(rel, text, stats) {
         lineStart = counted + 1;
       }
     }
-    // The cap (see above): the line before the call is measured before it is
-    // read, and the argument read stops one character past the cap.
-    if (m.index - lineStart > MAX_RAW_WRITE_TEXT_LENGTH) {
+    // The caps (see above): the file's budget is checked before anything is
+    // read, the line before the call is measured before it is read, and the
+    // argument read stops one character past the cap.
+    if (bindings.exhausted || m.index - lineStart > MAX_RAW_WRITE_TEXT_LENGTH) {
       reportUnresolved(lineIdx);
       continue;
     }
     const rawArg = captureFirstArg(joined, m.index + m[0].length, MAX_RAW_WRITE_TEXT_LENGTH);
     argumentChars += rawArg.length;
     if (rawArg.length > MAX_RAW_WRITE_TEXT_LENGTH) {
+      reportUnresolved(lineIdx);
+      continue;
+    }
+    // The argument and the line before the call are charged to the budget.
+    if (!chargeWork(bindings, rawArg.length + (m.index - lineStart))) {
       reportUnresolved(lineIdx);
       continue;
     }
@@ -1049,6 +1169,7 @@ function findRawStateWrites(rel, text, stats) {
     assignmentLookups += write.assignmentLookups;
     ownLineChars += write.ownLineChars;
     if (hit) report(REASON.RAW_STATE_WRITE, lineIdx);
+    else if (bindings.exhausted) reportUnresolved(lineIdx);
   }
   if (stats !== null && typeof stats === 'object') {
     stats.assignmentLookups = assignmentLookups;
@@ -1056,6 +1177,7 @@ function findRawStateWrites(rel, text, stats) {
     stats.assignmentMatches = bindings.assignmentMatches;
     stats.argumentChars = argumentChars;
     stats.ownLineChars = ownLineChars;
+    stats.resolverWork = bindings.work;
   }
   return out;
 }
@@ -1443,6 +1565,9 @@ module.exports = {
   targetsStatePath,
   MAX_TARGET_RESOLUTION_HOPS,
   MAX_RAW_WRITE_TEXT_LENGTH,
+  MAX_RAW_WRITE_RESOLVER_WORK,
+  LOOKUP_WORK,
+  lineReadWork,
   findOpaqueStateTransforms,
   captureCallArgList,
   findCompositionBypasses,

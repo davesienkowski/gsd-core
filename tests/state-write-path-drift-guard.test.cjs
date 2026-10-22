@@ -947,6 +947,151 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.ok(state.every((f) => f.line === 4));
   });
 
+  // The file's resolver budget, MAX_RAW_WRITE_RESOLVER_WORK, counted in
+  // `stats.resolverWork`: each write's argument and line before the call by
+  // length, and each line the resolver reads by `lineReadWork`. Past it the
+  // write is reported unresolved, never passed (fail closed).
+  test('budget: a file that takes MAX_RAW_WRITE_RESOLVER_WORK - 1 or exactly MAX work is resolved, one more is reported unresolved', () => {
+    const { MAX_RAW_WRITE_RESOLVER_WORK: MAX, lineReadWork } = guard;
+    assert.ok(Number.isInteger(MAX) && MAX > 0, 'MAX_RAW_WRITE_RESOLVER_WORK is exported');
+    // Two padding lines between the assignment of `p` and the write are read
+    // once, for `p`. `wide` holds `p`, so it is charged per `(`; `narrow` does
+    // not, so it is charged its length plus the fixed cost of a read.
+    const fixture = (wide, narrow) => W("  let p = path.join(dir, 'notes');", wide, narrow, "  fs.writeFileSync(p, 'x');");
+    const run = (text) => {
+      const stats = {};
+      const out = findRawStateWrites(OTHER_FILE, text, stats).map((f) => [f.line, f.reason]);
+      return { out, work: stats.resolverWork };
+    };
+    const base = run(fixture('', ''));
+    assert.strictEqual(typeof base.work, 'number', 'findRawStateWrites reports resolverWork');
+    assert.deepStrictEqual(base.out, []);
+    const D = 10000;
+    const READ = lineReadWork('', 'p'); // the fixed cost of a read
+    const sized = (total) => {
+      // lineReadWork(wide) = a * D, lineReadWork(narrow) = r, READ <= r < READ + D.
+      const charge = total - base.work + 2 * READ; // the empty padding lines
+      const a = Math.floor((charge - READ) / D);
+      const r = charge - a * D;
+      const wide = 'p' + '('.repeat(D - 1) + 'x'.repeat(a - READ - D);
+      const narrow = 'x'.repeat(r - READ);
+      assert.strictEqual(lineReadWork(wide, 'p') + lineReadWork(narrow, 'p'), charge);
+      return fixture(wide, narrow);
+    };
+    for (const total of [MAX - 1, MAX]) {
+      const got = run(sized(total));
+      assert.deepStrictEqual(got.out, [], `total ${total}`);
+      assert.strictEqual(got.work, total);
+    }
+    const over = run(sized(MAX + 1));
+    assert.deepStrictEqual(over.out, [[5, REASON.RAW_STATE_WRITE_UNRESOLVED]]);
+    assert.ok(over.work <= MAX, `${over.work} work`);
+    // A write that names the state path outright reads no line, and its
+    // argument and line before the call are still charged.
+    const direct = {};
+    assert.strictEqual(findRawStateWrites(OTHER_FILE, W('  fs.writeFileSync(statePath, c);'), direct).length, 1);
+    assert.strictEqual(direct.linesRead, 0);
+    assert.strictEqual(direct.resolverWork, direct.argumentChars + direct.ownLineChars);
+    assert.ok(direct.resolverWork > 0);
+  });
+
+  // Counted, not timed. Each name's first lookup reads back to the enclosing
+  // named function, so N writes of N different names read about N * N / 2
+  // lines without the budget. The long second argument makes each line cost
+  // more, so fewer writes reach the budget.
+  test('bound: writes that each name a different variable stop at the file\'s budget, and every later write is reported unresolved', () => {
+    const { MAX_RAW_WRITE_RESOLVER_WORK: MAX } = guard;
+    const N = 1800;
+    const body = [];
+    for (let k = 0; k < N; k++) body.push(`  fs.writeFileSync(a${k}, '${'x'.repeat(200)}');`);
+    const stats = {};
+    const out = findRawStateWrites(OTHER_FILE, W(...body), stats);
+    assert.ok(stats.resolverWork <= MAX, `${stats.resolverWork} work`);
+    assert.ok(stats.linesRead < (N * N) / 2, `${stats.linesRead} lines read`);
+    assert.ok(out.length > 0 && out.length < N, `${out.length} reported`);
+    assert.ok(out.every((f) => f.reason === REASON.RAW_STATE_WRITE_UNRESOLVED));
+    // The reported writes are the last ones, each once: lines first..N+1.
+    const first = out[0].line;
+    assert.deepStrictEqual(out.map((f) => f.line), Array.from({ length: N + 2 - first }, (_, k) => first + k));
+  });
+
+  // Counted, not timed. A line that repeats a typed head, a `for` header or a
+  // destructuring head scans to its end once per repeat; `lineReadWork`
+  // charges it per repeat, so past the budget it is not read at all.
+  test('bound: a line repeating a typed, for or destructuring head is charged per repeat, and past the budget the write is reported unresolved', () => {
+    const { MAX_RAW_WRITE_RESOLVER_WORK: MAX } = guard;
+    for (const head of ['const p: ', 'for (const p ', 'const {p ']) {
+      const shape = (n) => W(`  ${head.repeat(n)}`, '  fs.writeFileSync(p, c);');
+      // A few repeats: read, and not reported.
+      assert.deepStrictEqual(lines(shape(100)), [], head);
+      const stats = {};
+      const out = findRawStateWrites(OTHER_FILE, shape(8000), stats);
+      assert.ok(stats.resolverWork <= MAX, `${head}: ${stats.resolverWork} work`);
+      assert.deepStrictEqual(out.map((f) => [f.line, f.reason]), [[3, REASON.RAW_STATE_WRITE_UNRESOLVED]], head);
+    }
+  });
+
+  // Counted, not timed. Every write that reaches a wide right-hand side used
+  // to read it again; it is now read once and kept for later writes.
+  test('bound: a wide right-hand side is read once for all the writes that reach it', () => {
+    const rhs = Array.from({ length: 2000 }, (_, k) => `a${k}`).join(' + ');
+    const work = (writes) => {
+      const stats = {};
+      const body = [`  let p = ${rhs};`];
+      for (let k = 0; k < writes; k++) body.push('  fs.writeFileSync(p, c);');
+      assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, W(...body), stats), []);
+      return stats.resolverWork;
+    };
+    const W1 = 100;
+    const perWrite = (work(2 * W1) - work(W1)) / W1;
+    assert.ok(perWrite > 0 && perWrite < rhs.length / 4, `${perWrite} work per write, right-hand side ${rhs.length}`);
+    // The one read of a right-hand side is charged: with a single name in it,
+    // its line read and its right-hand side read are most of the work.
+    const same = Array(2000).fill('a').join(' + ');
+    const stats = {};
+    findRawStateWrites(OTHER_FILE, W(`  let p = ${same};`, '  fs.writeFileSync(p, c);'), stats);
+    assert.ok(stats.resolverWork >= 2 * same.length, `${stats.resolverWork} work, right-hand side ${same.length}`);
+  });
+
+  // Counted, not timed. Past a body boundary a write walks every earlier
+  // assignment of its name, and most of those lookups end in the cache
+  // without reading a line, so each lookup is charged on its own.
+  test('bound: every lookup and line read is charged, so walking earlier assignments past body boundaries is bounded by the budget', () => {
+    const { MAX_RAW_WRITE_RESOLVER_WORK: MAX, LOOKUP_WORK, lineReadWork } = guard;
+    const N = 300;
+    const body = [];
+    for (let k = 0; k < N; k++) body.push(`  p = q${k};`, '  }');
+    for (let k = 0; k < N; k++) body.push('  fs.writeFileSync(p, c);');
+    const stats = {};
+    assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, W(...body), stats), []);
+    assert.ok(Number.isInteger(LOOKUP_WORK) && LOOKUP_WORK > 0, 'LOOKUP_WORK is exported');
+    assert.ok(stats.assignmentLookups >= N * N, `${stats.assignmentLookups} lookups`);
+    const READ = lineReadWork('', 'p'); // the fixed cost of a read
+    assert.ok(READ > 1);
+    assert.ok(stats.resolverWork >= stats.assignmentLookups * LOOKUP_WORK + stats.linesRead * READ, `${stats.resolverWork} work`);
+    assert.ok(stats.resolverWork <= MAX);
+  });
+
+  test('budget: once it is spent, every later write in the file is reported, and earlier verdicts stand', () => {
+    const text = [
+      'function a(statePath, c) {',
+      '  fs.writeFileSync(statePath, c);',
+      `  ${'const p: '.repeat(8000)}`,
+      '  fs.writeFileSync(p, c);',
+      '}',
+      'function b(statePath, q, c) {',
+      '  fs.writeFileSync(statePath, c);',
+      '  fs.writeFileSync(q, c);',
+      '}',
+    ].join('\n');
+    assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, text).map((f) => [f.line, f.reason]), [
+      [2, REASON.RAW_STATE_WRITE],
+      [4, REASON.RAW_STATE_WRITE_UNRESOLVED],
+      [7, REASON.RAW_STATE_WRITE_UNRESOLVED],
+      [8, REASON.RAW_STATE_WRITE_UNRESOLVED],
+    ]);
+  });
+
   test('control: a variable assigned from a non-STATE.md literal, or a loop over an unrelated list, is NOT reported', () => {
     assert.deepStrictEqual(lines(W("  const p = path.join(dir, 'ROADMAP.md');", '  fs.writeFileSync(p, c);')), []);
     assert.deepStrictEqual(lines(W('  for (const f of files) {', '    fs.writeFileSync(f, c);', '  }')), []);
