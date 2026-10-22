@@ -936,9 +936,67 @@ const RAW_WRITE_ASSIGNMENT_OPTIONS = Object.freeze({ typed: true, stopAtPatternB
  * whole, so the names in its `${…}` interpolations are read, and so is any
  * word in its text: that can only add a lookup, never drop one.
  */
-function identifiersIn(expr) {
-  const code = expr.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, "''");
+function identifiersIn(expr, counter) {
+  const code = stripQuotedStrings(expr, counter);
   return [...new Set(code.match(/(?<![\w$])(?<!(?:^|[^.])\.)[A-Za-z_$][\w$]*/g) || [])];
+}
+
+// A line terminator: `.` in a regex does not match it.
+const isLineTerminator = (c) => c === '\n' || c === '\r' || c === '\u2028' || c === '\u2029';
+
+/**
+ * `expr` with each quoted `'...'` or `"..."` literal replaced by `''`: the same
+ * result as `expr.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, "''")`, in
+ * time linear in `expr` (#5104). That regex, from every quote with no closer,
+ * scans to the end of the text and fails, then tries the next quote, so a
+ * run of escaped quotes costs time quadratic in its length. Here a quote
+ * with no closer records where its failed scan stopped, and quotes of the
+ * same kind before that point are not tried: the failed scan passed each of
+ * them as the escaped half of `\\.`, so a scan from one would stop at the
+ * same point. A backslash before a line terminator (which `.` does not
+ * match) also stops a scan. Backticks are kept as text, as before.
+ *
+ * `counter.stringScanChars`, when given, counts the characters examined.
+ */
+function stripQuotedStrings(expr, counter) {
+  const failedBefore = { "'": -1, '"': -1 };
+  let examined = 0;
+  let out = '';
+  let i = 0;
+  while (i < expr.length) {
+    const c = expr[i];
+    examined++;
+    if ((c === "'" || c === '"') && i >= failedBefore[c]) {
+      let j = i + 1;
+      let closed = false;
+      while (j < expr.length) {
+        examined++;
+        const d = expr[j];
+        if (d === c) {
+          closed = true;
+          break;
+        }
+        if (d === '\\') {
+          if (j + 1 < expr.length && !isLineTerminator(expr[j + 1])) {
+            j += 2;
+            continue;
+          }
+          break;
+        }
+        j++;
+      }
+      if (closed) {
+        out += "''";
+        i = j + 1;
+        continue;
+      }
+      failedBefore[c] = j;
+    }
+    out += c;
+    i++;
+  }
+  if (counter) counter.stringScanChars += examined;
+  return out;
 }
 
 // A body opener, closer or arrow between an assignment and the write: the
@@ -1002,7 +1060,7 @@ const BODY_BOUNDARY_RE = /[{}]|=>/;
 function resolvesToStatePath(write, index, expr, hopsLeft) {
   if (targetsStatePath(expr)) return true;
   if (hopsLeft === 0) return false;
-  return identifiersIn(expr).some((name) => nameResolvesToStatePath(write, index, name, hopsLeft));
+  return identifiersIn(expr, write.bindings).some((name) => nameResolvesToStatePath(write, index, name, hopsLeft));
 }
 
 // One identifier's part of `resolvesToStatePath`: its assignments, nearest
@@ -1170,15 +1228,16 @@ function boundaryAfterLine(write, index) {
  * With both caps, a file costs time linear in its length (finding the calls,
  * counting lines) plus work bounded by the budget.
  *
- * `stats`, optional, receives seven counts over every write in `text`:
+ * `stats`, optional, receives eight counts over every write in `text`:
  * `assignmentLookups`, the `nearestPrecedingAssignment` calls, `linesRead`,
  * the lines those calls read, `assignmentMatches`, the assignment heads
  * decided on those lines (each in constant time once matched),
  * `argumentChars`, the characters `captureFirstArg` read (the target text
  * that `targetsStatePath` and `identifiersIn` then read), and `ownLineChars`,
  * the characters of each write's line before the call, counted at each read,
- * `resolverWork`, the work charged against the budget, and `readersBuilt`,
- * the names a `nameReader` was built for.
+ * `resolverWork`, the work charged against the budget, `readersBuilt`,
+ * the names a `nameReader` was built for, and `stringScanChars`, the
+ * characters `stripQuotedStrings` examined in the expressions read.
  * A test seam that bounds the work without a clock; `collect` passes none.
  * Each call overwrites the counts. Anything but an object (`null`,
  * `undefined`) receives nothing.
@@ -1189,7 +1248,7 @@ function findRawStateWrites(rel, text, stats) {
   const joined = stripped.join('\n');
   const boundaryLinesBefore = [0];
   for (const line of stripped) boundaryLinesBefore.push(boundaryLinesBefore[boundaryLinesBefore.length - 1] + (BODY_BOUNDARY_RE.test(line) ? 1 : 0));
-  const bindings = { byName: new Map(), readers: new Map(), linesRead: 0, assignmentMatches: 0, work: 0, maxWork: MAX_RAW_WRITE_RESOLVER_WORK, exhausted: false };
+  const bindings = { byName: new Map(), readers: new Map(), linesRead: 0, assignmentMatches: 0, work: 0, maxWork: MAX_RAW_WRITE_RESOLVER_WORK, exhausted: false, stringScanChars: 0 };
   const verdicts = new Map();
   let assignmentLookups = 0;
   let argumentChars = 0;
@@ -1274,6 +1333,7 @@ function findRawStateWrites(rel, text, stats) {
     stats.ownLineChars = ownLineChars;
     stats.resolverWork = bindings.work;
     stats.readersBuilt = bindings.readers.size;
+    stats.stringScanChars = bindings.stringScanChars;
   }
   return out;
 }

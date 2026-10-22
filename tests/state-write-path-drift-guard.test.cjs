@@ -1131,6 +1131,24 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.deepStrictEqual(reasons(named(MAX + 1)), [[2, REASON.RAW_STATE_WRITE_UNRESOLVED], [3, REASON.RAW_STATE_WRITE_UNRESOLVED]]);
   });
 
+  // Counted, not timed. Quoted strings are dropped from an expression before
+  // its names are read. A run of escaped quotes (here inside a template
+  // literal, which the argument capture treats as one string) used to cost
+  // that step time quadratic in the run; each character is now examined at
+  // most three times.
+  test('bound: a run of escaped quotes in a target or a right-hand side is stripped in one pass', () => {
+    const run = "`'" + "\\'".repeat(1000) + '`';
+    const shapes = [W(`  fs.writeFileSync(${run}, c);`), W(`  const q = ${run};`, '  fs.writeFileSync(q, c);')];
+    for (const text of shapes) {
+      const stats = {};
+      assert.deepStrictEqual(findRawStateWrites(OTHER_FILE, text, stats), []);
+      assert.strictEqual(typeof stats.stringScanChars, 'number', 'findRawStateWrites reports stringScanChars');
+      assert.ok(stats.stringScanChars >= run.length, `${stats.stringScanChars} characters examined`);
+      const bound = 3 * (stats.argumentChars + run.length);
+      assert.ok(stats.stringScanChars <= bound, `${stats.stringScanChars} characters examined, bound ${bound}`);
+    }
+  });
+
   test('budget: once it is spent, every later write in the file is reported, and earlier verdicts stand', () => {
     const text = [
       'function a(statePath, c) {',
