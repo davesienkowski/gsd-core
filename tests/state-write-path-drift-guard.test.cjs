@@ -968,12 +968,13 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.deepStrictEqual(base.out, []);
     const D = 10000;
     const READ = lineReadWork('', 'p'); // the fixed cost of a read
+    const NAME = lineReadWork('p', 'p') - 1 - READ; // one occurrence of `p`
     const sized = (total) => {
       // lineReadWork(wide) = a * D, lineReadWork(narrow) = r, READ <= r < READ + D.
       const charge = total - base.work + 2 * READ; // the empty padding lines
       const a = Math.floor((charge - READ) / D);
       const r = charge - a * D;
-      const wide = 'p' + '('.repeat(D - 1) + 'x'.repeat(a - READ - D);
+      const wide = 'p' + '('.repeat(D - 1) + 'x'.repeat(a - READ - NAME - D);
       const narrow = 'x'.repeat(r - READ);
       assert.strictEqual(lineReadWork(wide, 'p') + lineReadWork(narrow, 'p'), charge);
       return fixture(wide, narrow);
@@ -1070,6 +1071,29 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
     assert.ok(READ > 1);
     assert.ok(stats.resolverWork >= stats.assignmentLookups * LOOKUP_WORK + stats.linesRead * READ, `${stats.resolverWork} work`);
     assert.ok(stats.resolverWork <= MAX);
+  });
+
+  // Counted, not timed. A name that occurs at many overlapping offsets (a run
+  // of `a` read for the name `aaa...`) makes the head regex read the name
+  // again at each one, so a read is charged occurrences x name length too.
+  test('bound: a name occurring at many overlapping offsets is charged per occurrence, and past the budget its writes are reported unresolved', () => {
+    const { MAX_RAW_WRITE_RESOLVER_WORK: MAX } = guard;
+    const run = (L, M, K, writes) => {
+      const body = Array(K).fill('a'.repeat(M));
+      for (let w = 0; w < writes; w++) body.push(`  fs.writeFileSync(${'a'.repeat(L - w)}, c);`);
+      const stats = {};
+      const out = findRawStateWrites(OTHER_FILE, W(...body), stats);
+      return { out, stats };
+    };
+    // One read of a 20000-character run for a 200-character name.
+    const small = run(200, 20000, 1, 1);
+    assert.deepStrictEqual(small.out, []);
+    assert.ok(small.stats.resolverWork >= (20000 - 200 + 1) * 200, `${small.stats.resolverWork} work`);
+    // The review's shape, shortened: each read would pass the budget, so no
+    // line is read and every write is reported.
+    const big = run(4000, 100000, 2, 2);
+    assert.ok(big.stats.resolverWork <= MAX, `${big.stats.resolverWork} work`);
+    assert.deepStrictEqual(big.out.map((f) => f.reason), [REASON.RAW_STATE_WRITE_UNRESOLVED, REASON.RAW_STATE_WRITE_UNRESOLVED]);
   });
 
   test('budget: once it is spent, every later write in the file is reported, and earlier verdicts stand', () => {

@@ -532,7 +532,7 @@ function isQuotedLiteralArg(arg) {
  *     caller can resume its scan above the assignment it followed.
  *   - `firstLine`: read this text in place of `lines[index]`. Axis 2 passes
  *     the write's own line cut at the call.
- *   - `cache`: a `{ byName, headRegex, linesRead, assignmentMatches, work,
+ *   - `cache`: a `{ byName, readers, linesRead, assignmentMatches, work,
  *     maxWork, exhausted }` object shared by
  *     every call over the same `lines` with the same options. Each line is
  *     then read at most once per name: a scan stops at the first line whose
@@ -540,7 +540,9 @@ function isQuotedLiteralArg(arg) {
  *     `firstLine` is never cached.
  *     `linesRead` counts the lines read, `assignmentMatches` the assignment
  *     heads `assignedValue` decided on them.
- *     `headRegex` keeps each name's `assignmentHeadRegex`, built once.
+ *     `readers` keeps each name's `nameReader`, built once; a line is
+ *     then searched for the name in linear time and its regexes are tried
+ *     only where it occurs.
  *     `work` is the budget spent (`chargeWork`): each call charges
  *     `LOOKUP_WORK` plus the name's length, and each line read its
  *     `lineReadWork`. When a charge would pass `maxWork`, the scan stops
@@ -551,16 +553,15 @@ function isQuotedLiteralArg(arg) {
 function nearestPrecedingAssignment(lines, index, varName, options = {}) {
   const cache = options.cache;
   if (cache && !chargeWork(cache, LOOKUP_WORK + varName.length)) return null;
-  let assignRe;
+  let reader = null;
   let known = null;
   if (cache) {
     known = cache.byName.get(varName);
     if (!known) cache.byName.set(varName, (known = []));
-    assignRe = cache.headRegex.get(varName);
-    if (!assignRe) cache.headRegex.set(varName, (assignRe = assignmentHeadRegex(varName, options.typed)));
-  } else {
-    assignRe = assignmentHeadRegex(varName, options.typed);
+    reader = cache.readers.get(varName);
+    if (!reader) cache.readers.set(varName, (reader = nameReader(varName, options.typed)));
   }
+  const assignRe = reader ? reader.head : assignmentHeadRegex(varName, options.typed);
   const own = options.firstLine !== undefined;
   let result = null;
   let i = index;
@@ -570,14 +571,17 @@ function nearestPrecedingAssignment(lines, index, varName, options = {}) {
       break;
     }
     const line = own && i === index ? options.firstLine : lines[i];
+    let positions;
     if (cache) {
-      if (!chargeWork(cache, lineReadWork(line, varName))) return null;
+      positions = nameOccurrences(line, varName, reader.failure);
+      if (!chargeWork(cache, lineReadWork(line, varName, positions))) return null;
       cache.linesRead++;
     }
     if (FUNCTION_DECL_LINE_RE.test(line)) break;
-    if (!line.includes(varName)) continue; // a line without the name cannot bind it
-    if (options.stopAtPatternBinding && bindsByPattern(line, varName)) break;
-    const rhs = assignedValue(line, assignRe, cache);
+    // A line without the name cannot bind it.
+    if (positions ? positions.length === 0 : !line.includes(varName)) continue;
+    if (options.stopAtPatternBinding && bindsByPattern(line, varName, reader, positions)) break;
+    const rhs = assignedValue(line, assignRe, cache, positions);
     if (rhs !== null) {
       result = options.withLine ? { rhs: rhs.trim(), line: i } : rhs.trim();
       break;
@@ -609,48 +613,116 @@ function nearestPrecedingAssignment(lines, index, varName, options = {}) {
  *     match costs time linear in what it reads, and a failed one resumes one
  *     character on.
  */
-function assignmentHeadRegex(varName, typed) {
+function assignmentHeadRegex(varName, typed, flags = 'g') {
   const name = escapeRegex(varName);
   const lead = '(?:^|[^.\\w$])';
   const typedForm = typed ? `(?<=${lead}(?:const|let|var)\\s+${name})\\s*:[^=;]+=|` : '';
-  return new RegExp(`${name}(?:${typedForm}(?<=${lead}(?:const|let|var)?\\s*${name})\\s*=)(?=(\\s*))\\1`, 'g');
+  return new RegExp(`${name}(?:${typedForm}(?<=${lead}(?:const|let|var)?\\s*${name})\\s*=)(?=(\\s*))\\1`, flags);
 }
 
 // The right-hand side `assignmentHeadRegex` (`re`) reads on `line`, untrimmed,
 // or `null`. See there. `counter.assignmentMatches`, when given, counts the
 // head matches decided.
-function assignedValue(line, re, counter) {
+//
+// `positions`, when given, are the offsets where the name occurs on `line`
+// (`nameOccurrences`) and `re` is the sticky form of the regex. A head match
+// can only start where the name occurs, since the regex starts with it, so
+// trying each of those offsets in order finds the same matches as the global
+// scan, without trying every other offset. On a line where the name nearly
+// matches at every offset, the global scan costs line length x name length
+// even when the name occurs once.
+function assignedValue(line, re, counter, positions) {
   // The last character `.` does not match, or -1.
   const terminator = Math.max(...['\n', '\r', '\u2028', '\u2029'].map((c) => line.lastIndexOf(c)));
-  re.lastIndex = 0;
-  let m;
-  while ((m = re.exec(line)) !== null) {
+  const decide = (m) => {
     if (counter) counter.assignmentMatches++;
     const end = m.index + m[0].length; // the end of the run after `=`
     if (end < line.length && line[end] !== '=' && end >= terminator) return line.slice(end);
     if (m[1].length > 0 && end - 1 >= terminator) return line.slice(end - 1);
+    return null;
+  };
+  if (positions !== undefined) {
+    for (const p of positions) {
+      re.lastIndex = p;
+      const m = re.exec(line);
+      if (m === null) continue;
+      const rhs = decide(m);
+      if (rhs !== null) return rhs;
+    }
+    return null;
+  }
+  re.lastIndex = 0;
+  let m;
+  while ((m = re.exec(line)) !== null) {
+    const rhs = decide(m);
+    if (rhs !== null) return rhs;
     re.lastIndex = m.index + 1;
   }
   return null;
 }
 
 // The work `nearestPrecedingAssignment` is charged for reading `line` for
-// `varName` under a cache budget (#5104). A line without the name costs its
-// length plus `LINE_READ_WORK` (`includes`, and the fixed cost of a read).
-// A line with it is also matched by `assignmentHeadRegex` and
-// `bindsByPattern`, and each of those can start a scan to the end of the line
-// at a `:` (a typed head), a `(` (a `for` header) or a `[` or `{` (a
-// destructuring pattern), so it costs that, times one more than the count of
-// those characters. That bounds the steps the reads take, up to a constant
-// factor, however the line repeats a declaration or header.
-function lineReadWork(line, varName) {
-  if (!line.includes(varName)) return line.length + LINE_READ_WORK;
+// `varName` under a cache budget (#5104), given the name's `occurrences` on
+// it. A line without the name costs its length plus `LINE_READ_WORK` (the
+// linear search, and the fixed cost of a read). On a line with it the regexes
+// are tried at each occurrence, each try reading the name again, so it costs
+// its length plus `LINE_READ_WORK` plus occurrences x name length. Each of
+// those regexes can also start a scan to the end of the line at a `:` (a typed
+// head), a `(` (a `for` header) or a `[` or `{` (a destructuring pattern),
+// so that sum is multiplied by one more than the count of those characters.
+// That bounds the steps the reads take, up to a constant factor, however the
+// line repeats a declaration, a header or the name.
+function lineReadWork(line, varName, occurrences = nameOccurrences(line, varName)) {
+  if (occurrences.length === 0) return line.length + LINE_READ_WORK;
   let starts = 1;
   for (let k = 0; k < line.length; k++) {
     const c = line[k];
     if (c === ':' || c === '(' || c === '[' || c === '{') starts++;
   }
-  return (line.length + LINE_READ_WORK) * starts;
+  return (line.length + LINE_READ_WORK + occurrences.length * varName.length) * starts;
+}
+
+// What `nearestPrecedingAssignment` keeps per name under a cache: the sticky
+// `assignmentHeadRegex` and pattern-binding regex, each tried only where the
+// name occurs, and the name's failure table for `nameOccurrences`.
+function nameReader(varName, typed) {
+  return {
+    head: assignmentHeadRegex(varName, typed, 'y'),
+    binds: patternBindingRegex(varName, 'y'),
+    failure: failureTable(varName),
+  };
+}
+
+// The Knuth-Morris-Pratt failure table of `name`: entry `i` is the length of
+// the longest proper prefix of `name[0..i]` that is also its suffix.
+function failureTable(name) {
+  const failure = new Int32Array(name.length);
+  for (let i = 1, k = 0; i < name.length; i++) {
+    const c = name.charCodeAt(i);
+    while (k > 0 && c !== name.charCodeAt(k)) k = failure[k - 1];
+    if (c === name.charCodeAt(k)) k++;
+    failure[i] = k;
+  }
+  return failure;
+}
+
+// Every offset where `name` occurs on `line`, overlapping ones included, in
+// time linear in the line (Knuth-Morris-Pratt). `String#includes` is not
+// linear for every name: one with a repeated half takes line length x name
+// length on a line of the repeated character.
+function nameOccurrences(line, name, failure = failureTable(name)) {
+  const out = [];
+  const n = name.length;
+  for (let i = 0, k = 0; i < line.length; i++) {
+    const c = line.charCodeAt(i);
+    while (k > 0 && c !== name.charCodeAt(k)) k = failure[k - 1];
+    if (c === name.charCodeAt(k)) k++;
+    if (k === n) {
+      out.push(i - n + 1);
+      k = failure[k - 1];
+    }
+  }
+  return out;
 }
 
 // The fixed part of the work charged for one line read, and for one
@@ -675,18 +747,34 @@ const LOOKUP_WORK = 64;
 // is unchanged: the pattern read is the same whenever a header matches, and a
 // match the old form found only by backtracking read whitespace alone, which
 // binds no name.
-const LOOP_BINDING_RE = /\bfor\s*(?:await\s*)?\(\s*(?:const|let|var)(?=(\s+))\1(?<pattern>.*?\S)\s+of\b/;
-const DESTRUCTURING_BINDING_RE = /\b(?:const|let|var)\s+(?<pattern>[[{].*?[\]}])\s*=/;
+const LOOP_BINDING_RE = /\bfor\s*(?:await\s*)?\(\s*(?:const|let|var)(?=(\s+))\1(?<pattern>.*?\S)\s+of\b/d;
+const DESTRUCTURING_BINDING_RE = /\b(?:const|let|var)\s+(?<pattern>[[{].*?[\]}])\s*=/d;
 
 /**
  * True when `line` binds `name` through a `for...of` loop header or a
  * destructuring pattern. A `{ key: alias }` entry binds `alias`, not `key`.
  */
-function bindsByPattern(line, name) {
+function bindsByPattern(line, name, reader, positions) {
   return [LOOP_BINDING_RE, DESTRUCTURING_BINDING_RE].some((re) => {
     const m = re.exec(line);
-    return m !== null && new RegExp(`(?<![\\w$.])${escapeRegex(name)}(?![\\w$])(?!\\s*:)`).test(m.groups.pattern);
+    if (m === null) return false;
+    const pattern = m.groups.pattern;
+    if (!reader) return patternBindingRegex(name).test(pattern);
+    // Under a cache: try the sticky regex only where the name occurs inside
+    // the pattern (see `assignedValue`), on the pattern's own text.
+    const [start, end] = m.indices.groups.pattern;
+    return positions.some((p) => {
+      if (p < start || p + name.length > end) return false;
+      reader.binds.lastIndex = p - start;
+      return reader.binds.test(pattern);
+    });
   });
+}
+
+// `name` as a binding in a destructuring or loop pattern: not a property
+// (`.name`), not part of a longer name, and not a `{ name: alias }` key.
+function patternBindingRegex(name, flags = '') {
+  return new RegExp(`(?<![\\w$.])${escapeRegex(name)}(?![\\w$])(?!\\s*:)`, flags);
 }
 
 /**
@@ -813,10 +901,10 @@ const MAX_TARGET_RESOLUTION_HOPS = 4;
 // the call. Past either, the write is reported unresolved
 // (`RAW_STATE_WRITE_UNRESOLVED`), never passed. Without it a call left open
 // took the rest of the file as its target, once per call, and each of many
-// writes on one line re-read the line before it. Over the 1715 tracked
-// script and source files, the longest first argument of a write is 115
-// characters and the longest line before a call 129 (35 and 103 in `src/`),
-// so this is over 30 times either.
+// writes on one line re-read the line before it. Over the 1728 tracked
+// script and source files, the longest first argument of a write and the
+// longest line before a call are each 129 characters (35 and 103 in
+// `src/`), so this is over 30 times either.
 const MAX_RAW_WRITE_TEXT_LENGTH = 4096;
 
 // The most work Axis 2 spends resolving the writes of one file (#5104): the
@@ -826,12 +914,11 @@ const MAX_RAW_WRITE_TEXT_LENGTH = 4096;
 // (`assignmentVerdict`). Once spent, nothing more is read: the write that ran
 // out and every later write in the file not yet found to name the state path
 // are reported unresolved (`RAW_STATE_WRITE_UNRESOLVED`), never passed. Over
-// the 1728 tracked script and source files the most any file takes is 8186334
-// (`tests/state.test.cjs`, 1 MB); in `src/` it is 160872
+// the 1728 tracked script and source files the most any file takes is 8267472
+// (`tests/state.test.cjs`, 1 MB); in `src/` it is 163185
 // (`src/commands.cts`). So this is over 30 times the first and over 1500
-// times the second. Measured on hostile files that spend it all, the budget
-// costs 1 to 3 ns a unit, so well under a second a file on top of the linear
-// pass every file takes.
+// times the second. On the hostile files probed that spend it all, a file
+// took at most about 2.5 s (under 10 ns a unit, the linear pass included).
 const MAX_RAW_WRITE_RESOLVER_WORK = 250000000;
 
 // How Axis 2 reads an assignment through `nearestPrecedingAssignment` (#5104).
@@ -1094,7 +1181,7 @@ function findRawStateWrites(rel, text, stats) {
   const joined = stripped.join('\n');
   const boundaryLinesBefore = [0];
   for (const line of stripped) boundaryLinesBefore.push(boundaryLinesBefore[boundaryLinesBefore.length - 1] + (BODY_BOUNDARY_RE.test(line) ? 1 : 0));
-  const bindings = { byName: new Map(), headRegex: new Map(), linesRead: 0, assignmentMatches: 0, work: 0, maxWork: MAX_RAW_WRITE_RESOLVER_WORK, exhausted: false };
+  const bindings = { byName: new Map(), readers: new Map(), linesRead: 0, assignmentMatches: 0, work: 0, maxWork: MAX_RAW_WRITE_RESOLVER_WORK, exhausted: false };
   const verdicts = new Map();
   let assignmentLookups = 0;
   let argumentChars = 0;
