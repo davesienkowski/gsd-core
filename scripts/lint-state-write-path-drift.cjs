@@ -533,13 +533,14 @@ function isQuotedLiteralArg(arg) {
  *   - `firstLine`: read this text in place of `lines[index]`. Axis 2 passes
  *     the write's own line cut at the call.
  *   - `cache`: a `{ byName, readers, linesRead, assignmentMatches, work,
- *     maxWork, exhausted }` object shared by
+ *     maxWork, exhausted, stringScanChars }` object shared by
  *     every call over the same `lines` with the same options. Each line is
  *     then read at most once per name: a scan stops at the first line whose
  *     result is cached, and records its result for every line it read.
  *     `firstLine` is never cached.
  *     `linesRead` counts the lines read, `assignmentMatches` the assignment
- *     heads `assignedValue` decided on them.
+ *     heads `assignedValue` decided on them, and `stringScanChars` the
+ *     characters `stripQuotedStrings` examined in the expressions read.
  *     `readers` keeps each name's `nameReader`, built once and charged
  *     `READER_WORK` plus `READER_WORK_PER_CHAR` per character; a line is
  *     then searched for the name and its regexes are tried only where it
@@ -917,10 +918,12 @@ const MAX_RAW_WRITE_TEXT_LENGTH = 4096;
 // name's reader built (`READER_WORK` plus `READER_WORK_PER_CHAR` per
 // character), each line it reads (`lineReadWork`), and each assignment's
 // right-hand side read (`assignmentVerdict`). A name longer than
-// `MAX_RESOLVED_NAME_LENGTH` is charged as the whole budget. Once spent, nothing more is read: the write that ran
-// out and every later write in the file not yet found to name the state path
-// are reported unresolved (`RAW_STATE_WRITE_UNRESOLVED`), never passed. Over
-// the 1728 tracked script and source files the most any file takes is 9315920
+// `MAX_RESOLVED_NAME_LENGTH` is charged as the whole budget. Once spent,
+// nothing more is read: the write that ran out, unless already found to name
+// the state path, is reported unresolved (`RAW_STATE_WRITE_UNRESOLVED`), never
+// passed; so is every later write in the file, even one whose argument names
+// `statePath` itself, since its argument is no longer read. Over the 1728
+// tracked script and source files the most any file takes is 9315920
 // (`tests/state.test.cjs`, 1 MB); in `src/` it is 308033
 // (`src/commands.cts`). So this is over 25 times the first and over 800
 // times the second.
@@ -1216,10 +1219,12 @@ function boundaryAfterLine(write, index) {
  * right-hand side read, which `assignmentVerdict` keeps for later writes so
  * a wide one is not read once per write. A name longer than
  * `MAX_RESOLVED_NAME_LENGTH` is charged as the whole budget. A charge that would
- * pass the budget is not made and its read not done. The write that ran out
- * and every later write in the file not yet found to name the state path are
- * reported as `RAW_STATE_WRITE_UNRESOLVED`, at most once per line, so the
- * budget too can add reports but never drop one. Without it, many writes that
+ * pass the budget is not made and its read not done. The write that ran out,
+ * unless already found to name the state path, is reported as
+ * `RAW_STATE_WRITE_UNRESOLVED`; so is every later write in the file, even one
+ * whose argument names `statePath` itself, since once the budget is spent no
+ * argument is read. At most one unresolved report per line, so the budget
+ * too can add reports but never drop one. Without it, many writes that
  * each name a different variable read back to the enclosing named function
  * once per name (distinct names x lines), a line that repeats a declaration
  * scanned to its end once per repeat (quadratic in the line), each write
