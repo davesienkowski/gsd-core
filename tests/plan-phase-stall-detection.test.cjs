@@ -1512,6 +1512,7 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     const failClosed = doc.slice(at, doc.indexOf('\n\n', at));
     assert.ok(failClosed.includes('`## VERIFICATION PASSED`'), '## VERIFICATION PASSED is in the fail-closed list');
     assert.match(failClosed, /`## VERIFICATION PASSED`[^.]*never proceeds to step 13/, 'a body-less PASSED never proceeds to step 13 on the receipt alone');
+    assert.match(step11, /proceed to step 13 \(receipt only, no body by the next cycle: 11a\)/, 'step 11 itself points a body-less PASSED at 11a');
   });
 
   test('both agent definitions carry the receipt rule; the checker writes it with Write, its only write', () => {
