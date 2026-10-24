@@ -1196,12 +1196,14 @@ function boundaryAfterLine(write, index) {
  * of a class method (`save(p, c) {`, `async save(p, c) {`) or of an unnamed
  * `function (p)` expression, resolved to a sibling method's or function's
  * STATE.md variable or to an outer one it shadows (only a named `function`
- * header ends the scan), a
+ * header ends the scan), an arrow's parameter resolved to a sibling arrow
+ * body's variable of the same name, a
  * block-scoped binding or `for` header's `let` earlier on the write's line
  * (`if (a) { const p = statePath; } else { fs.writeFileSync(p, c); }`), a target
  * computed from the state file, a longer name such as `STATE.md.bak`, a
- * right-hand side that runs past its own `;` into a later statement on that
- * line, and a string that spells the call.
+ * word in a template literal's text that names a statePath variable (the
+ * template is read whole), a right-hand side that runs past its own `;` into
+ * a later statement on that line, and a string that spells the call.
  *
  * Cost: the file's lines are read once per name across every write (the
  * `bindings` cache) and each write's own line once per name it resolves. A
