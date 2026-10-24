@@ -1515,6 +1515,25 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     assert.match(step11, /proceed to step 13 \(receipt only, no body by the next cycle: 11a\)/, 'step 11 itself points a body-less PASSED at 11a');
   });
 
+  // The helpers send a body-less receipt-routed PASSED or ISSUES FOUND to 11a "and offer Retry
+  // checker before Accept". 11a's elaboration must carry that entry route itself: a trigger that
+  // covers it, a banner naming the marker that arrived, and Retry listed before Accept.
+  test('11a covers a receipt-routed checker marker whose body never arrived: names the marker, Retry before Accept', () => {
+    const detail = readFileNormalized(path.join(REPO_ROOT, 'gsd-core', 'workflows', 'plan-phase', 'detail', 'elaboration.md'));
+    const s11a = sectionOf(detail, ['## § 11a', '## § 11 thinking-partner']);
+    assert.match(s11a, /Fires when[^\n]*return receipt[^\n]*has not arrived by the next cycle/, '11a\'s trigger covers a receipt-routed marker with no body');
+    const at = s11a.indexOf('a marker arrived on the receipt without its body');
+    assert.notEqual(at, -1, '11a has a case for a marker that arrived on the receipt without its body');
+    const receiptCase = s11a.slice(at, s11a.indexOf('**If `DISK_PLANS`', at + 1));
+    assert.match(receiptCase, /\{MARKER\}/, 'the receipt-case banner names the marker that arrived');
+    const retry = receiptCase.indexOf('**Retry checker**');
+    const accept = receiptCase.indexOf('**Accept verification**');
+    assert.ok(retry !== -1 && accept !== -1, 'the receipt case offers both Retry checker and Accept verification');
+    assert.ok(retry < accept, 'the receipt case lists Retry checker before Accept verification');
+    // Control: the original empty/truncated route keeps its own banner and menu.
+    assert.match(s11a, /Checker return was empty or truncated/, 'control: the empty/truncated banner stays');
+  });
+
   test('both agent definitions carry the receipt rule; the checker writes it with Write, its only write', () => {
     const planner = readFileNormalized(path.join(REPO_ROOT, 'agents', 'gsd-planner.md'));
     const checker = readFileNormalized(path.join(REPO_ROOT, 'agents', 'gsd-plan-checker.md'));
