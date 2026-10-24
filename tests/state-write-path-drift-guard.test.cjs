@@ -1374,6 +1374,13 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
       currentBuggyOutput: [],
     },
     {
+      // Missed: a Map built in another function is not resolved, and the key string is dropped.
+      shape: 'STATE.md file name held as a Map value built in another function',
+      text: ['function names() {', '  const m = new Map();', "  m.set('state', 'STATE.md');", '  return m;', '}', 'function f(d, c) {', '  const m = names();', "  fs.writeFileSync(path.join(d, m.get('state')), c);", '}'].join('\n'),
+      expected: [8],
+      currentBuggyOutput: [],
+    },
+    {
       // False positive: a one-line nested function's parameter shadows the outer variable.
       shape: 'one-line nested function parameter shadowing an outer statePath variable',
       text: W('  const target = statePath;', '  function inner(target) { fs.writeFileSync(target, c); }'),
@@ -1474,6 +1481,13 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
       shape: "a STATE.md name split across literals ('STATE' + '.md') through a variable",
       text: W("  const p = path.join(dir, 'STATE' + '.md');", '  fs.writeFileSync(p, c);'),
       expected: [3],
+      currentBuggyOutput: [],
+    },
+    {
+      // Missed: as above, for a name built in a template.
+      shape: 'a STATE.md name built in a template (`STATE${\'.md\'}`)',
+      text: W("  fs.writeFileSync(path.join(dir, `STATE${'.md'}`), c);"),
+      expected: [2],
       currentBuggyOutput: [],
     },
   ];

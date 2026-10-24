@@ -1180,8 +1180,10 @@ function boundaryAfterLine(write, index) {
  *     name holding `'STATE.md'` there): only the `=` line is read.
  *   - A default parameter (`function w(p = path.join(dir, 'STATE.md'))`):
  *     the named-function header ends the scan before its line is read.
- *   - A STATE.md name split across literals (`'STATE' + '.md'`), inline or
- *     through a variable: `targetsStatePath` matches the text, not its value.
+ *   - A STATE.md name not spelled as one literal: split across literals
+ *     (`'STATE' + '.md'`, inline or through a variable) or built in a
+ *     template (`` `STATE${'.md'}` ``): `targetsStatePath` matches the text,
+ *     not its value.
  *   - Any call but the literal text `fs.writeFileSync(` (`fs.promises.
  *     writeFile`, `fs.appendFileSync`, `fs.renameSync(tmp, statePath)`, an
  *     alias or destructured `writeFileSync`), and a call after a `//` inside a
@@ -1193,8 +1195,9 @@ function boundaryAfterLine(write, index) {
  * parameter of an arrow or one-line nested function shadowing an outer
  * STATE.md variable, a one-line top-level function's parameter resolved
  * into an earlier function (its header is dropped, see above), a parameter
- * of a class method (`save(p, c) {`, `async save(p, c) {`) or of an unnamed
- * `function (p)` expression, resolved to a sibling method's or function's
+ * of a class method (`save(p, c) {`, `async save(p, c) {`) resolved to a
+ * sibling method's STATE.md variable, a parameter of an unnamed
+ * `function (p)` expression resolved to a sibling function expression's
  * STATE.md variable or to an outer one it shadows (only a named `function`
  * header ends the scan), an arrow's parameter resolved to a sibling arrow
  * body's variable of the same name, a
