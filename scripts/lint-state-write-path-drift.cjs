@@ -1175,6 +1175,13 @@ function boundaryAfterLine(write, index) {
  *     after `=`, an annotation holding `;`, a CRLF file (`.` does not
  *     match `\r`, so no assignment is read), and a chain longer than
  *     `MAX_TARGET_RESOLUTION_HOPS`.
+ *   - A value that starts on the `=` line and continues on later lines
+ *     (`const p = path.join(` with `dir,` and `'STATE.md',` below it, or a
+ *     name holding `'STATE.md'` there): only the `=` line is read.
+ *   - A default parameter (`function w(p = path.join(dir, 'STATE.md'))`):
+ *     the named-function header ends the scan before its line is read.
+ *   - A STATE.md name split across literals (`'STATE' + '.md'`), inline or
+ *     through a variable: `targetsStatePath` matches the text, not its value.
  *   - Any call but the literal text `fs.writeFileSync(` (`fs.promises.
  *     writeFile`, `fs.appendFileSync`, `fs.renameSync(tmp, statePath)`, an
  *     alias or destructured `writeFileSync`), and a call after a `//` inside a
@@ -1185,7 +1192,11 @@ function boundaryAfterLine(write, index) {
  * statePath), 'ROADMAP.md')`, inline or through a variable), a same-name
  * parameter of an arrow or one-line nested function shadowing an outer
  * STATE.md variable, a one-line top-level function's parameter resolved
- * into an earlier function (its header is dropped, see above), a
+ * into an earlier function (its header is dropped, see above), a parameter
+ * of a class method (`save(p, c) {`, `async save(p, c) {`) or of an unnamed
+ * `function (p)` expression, resolved to a sibling method's or function's
+ * STATE.md variable or to an outer one it shadows (only a named `function`
+ * header ends the scan), a
  * block-scoped binding or `for` header's `let` earlier on the write's line
  * (`if (a) { const p = statePath; } else { fs.writeFileSync(p, c); }`), a target
  * computed from the state file, a longer name such as `STATE.md.bak`, a

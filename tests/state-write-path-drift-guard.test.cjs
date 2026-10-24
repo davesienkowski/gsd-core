@@ -1325,6 +1325,20 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
       currentBuggyOutput: [],
     },
     {
+      // Missed: only the `=` line is read, so the STATE.md segment on a later line is not.
+      shape: 'declaration whose STATE.md value continues on later lines',
+      text: W('  const p = path.join(', '    dir,', "    'STATE.md',", '  );', '  fs.writeFileSync(p, c);'),
+      expected: [6],
+      currentBuggyOutput: [],
+    },
+    {
+      // Missed: only the `=` line is read, so the name holding STATE.md on a later line is not.
+      shape: 'declaration whose value continues on later lines with a name holding STATE.md',
+      text: W("  const n = 'STATE.md';", '  const p = path.join(', '    dir,', '    n,', '  );', '  fs.writeFileSync(p, c);'),
+      expected: [7],
+      currentBuggyOutput: [],
+    },
+    {
       // Missed: the annotation holds a `;`, which ends it.
       shape: 'type annotation holding a semicolon',
       text: W("  const p: { a: string; b: string } = path.join(dir, 'STATE.md');", '  fs.writeFileSync(p, c);'),
@@ -1336,6 +1350,13 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
       shape: 'one-line function assigning and writing a STATE.md path',
       text: "function w(){ const p = join(dir,'STATE.md'); fs.writeFileSync(p,c); }",
       expected: [1],
+      currentBuggyOutput: [],
+    },
+    {
+      // Missed: the named-function header ends the scan before its default is read.
+      shape: 'default parameter holding a STATE.md path',
+      text: ["function w(p = path.join(dir, 'STATE.md')) {", '  fs.writeFileSync(p, c);', '}'].join('\n'),
+      expected: [2],
       currentBuggyOutput: [],
     },
     {
@@ -1404,6 +1425,29 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
       expected: [],
       currentBuggyOutput: [6],
     },
+    ...['save', 'async save'].map((head) => ({
+      // False positive: a method header has no `function` keyword, so it does
+      // not end the scan, and the parameter resolves to a sibling method's variable.
+      shape: `class method \`${head}(p, c)\` parameter resolved to a sibling method's STATE.md variable`,
+      text: ['class S {', '  load(dir) {', "    const p = path.join(dir, 'STATE.md');", '    return p;', '  }', `  ${head}(p, c) {`, '    fs.writeFileSync(p, c);', '  }', '}'].join('\n'),
+      expected: [],
+      currentBuggyOutput: [7],
+    })),
+    {
+      // False positive: an unnamed `function (p)` header does not end the scan,
+      // and its parameter is not read as a binding.
+      shape: 'function expression parameter shadowing an outer STATE.md variable',
+      text: W("  const p = path.join(dir, 'STATE.md');", '  const save = function (p) {', '    fs.writeFileSync(p, c);', '  };'),
+      expected: [],
+      currentBuggyOutput: [4],
+    },
+    {
+      // False positive: as above, so `b`'s parameter resolves to `a`'s variable.
+      shape: 'sibling function expression body binding the same name',
+      text: ['const a = function (dir) {', "  const p = path.join(dir, 'STATE.md');", '  return p;', '};', 'const b = function (p, c) {', '  fs.writeFileSync(p, c);', '};'].join('\n'),
+      expected: [],
+      currentBuggyOutput: [6],
+    },
     {
       // False positive: a target computed from the state file is not the state file.
       shape: 'target derived from the state file',
@@ -1417,6 +1461,20 @@ describe('F4 — the raw-write axis sees wrapped calls and same-function variabl
       text: W("  fs.writeFileSync(path.join(dir, 'STATE.md.bak'), c);"),
       expected: [],
       currentBuggyOutput: [2],
+    },
+    {
+      // Missed: `/STATE\.md/` reads the text, so a name split across literals evades it.
+      shape: "a STATE.md name split across literals ('STATE' + '.md')",
+      text: W("  fs.writeFileSync(path.join(dir, 'STATE' + '.md'), c);"),
+      expected: [2],
+      currentBuggyOutput: [],
+    },
+    {
+      // Missed: as above, through a variable.
+      shape: "a STATE.md name split across literals ('STATE' + '.md') through a variable",
+      text: W("  const p = path.join(dir, 'STATE' + '.md');", '  fs.writeFileSync(p, c);'),
+      expected: [3],
+      currentBuggyOutput: [],
     },
   ];
   gapLoop(KNOWN_SCOPE_GAPS, 'line-based scope');
