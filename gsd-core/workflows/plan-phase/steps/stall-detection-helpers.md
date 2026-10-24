@@ -58,7 +58,10 @@ return (the checker's issue list, the planner's plan count or checkpoint) always
 comes from the completion result. If both are present and name different markers,
 treat the return as unrecognized (9a/11a). A route that needs the body when it never
 arrives fails closed: a receipt-routed `## ISSUES FOUND` with no issue list is
-never counted as 0 issues; use 11a and offer Retry checker before Accept. A planner
+never counted as 0 issues; use 11a and offer Retry checker before Accept. A
+receipt-routed `## VERIFICATION PASSED` whose body has not arrived by the next cycle
+never proceeds to step 13 on the receipt alone, since step 11 reads that body for
+listed findings (#5578): use 11a and offer Retry checker before Accept. A planner
 `## CHECKPOINT REACHED`, `## PHASE SPLIT RECOMMENDED` or `## ⚠ Source Audit` whose body
 (the question, the proposed split, the gap list) has not arrived by the next cycle
 never routes to an empty checkpoint, 9b or 9c: use 9a, name the marker received, and

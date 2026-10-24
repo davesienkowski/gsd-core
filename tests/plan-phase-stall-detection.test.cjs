@@ -1498,6 +1498,22 @@ describe('bug #5182 — the stall watch observes a GSD-owned return receipt, nev
     assert.equal(ran, 5);
   });
 
+  // Merge with next 39bb1b367 (#5578): step 11 now reads a ## VERIFICATION PASSED return's body for
+  // listed BLOCKER/WARNING entries before proceeding, and a receipt never carries that body, so a
+  // receipt-only PASSED must fail closed like the other body-needing routes instead of reaching step 13.
+  test('a receipt-routed ## VERIFICATION PASSED with no body fails closed (step 11 reads its findings, #5578)', () => {
+    const step11 = sectionOf(readPlanPhase(), ['## 11. Handle Checker Return', '## 11a.']);
+    assert.match(step11, /VERIFICATION PASSED`:\*\* If the return lists an entry whose severity is BLOCKER or WARNING/, 'control: step 11 reads the PASSED body (#5578)');
+    const checker = watchCallOf(sectionOf(readPlanPhase(), CHECKER_SECTION));
+    assert.ok(checker.markers.includes('## VERIFICATION PASSED'), 'control: the checker watch passes the PASSED marker');
+    const doc = readStallHelpersDoc();
+    const at = doc.indexOf('fails closed:');
+    assert.notEqual(at, -1);
+    const failClosed = doc.slice(at, doc.indexOf('\n\n', at));
+    assert.ok(failClosed.includes('`## VERIFICATION PASSED`'), '## VERIFICATION PASSED is in the fail-closed list');
+    assert.match(failClosed, /`## VERIFICATION PASSED`[^.]*never proceeds to step 13/, 'a body-less PASSED never proceeds to step 13 on the receipt alone');
+  });
+
   test('both agent definitions carry the receipt rule; the checker writes it with Write, its only write', () => {
     const planner = readFileNormalized(path.join(REPO_ROOT, 'agents', 'gsd-planner.md'));
     const checker = readFileNormalized(path.join(REPO_ROOT, 'agents', 'gsd-plan-checker.md'));
