@@ -2349,6 +2349,89 @@ test('#5008: every differential input is pinned to the merge-base, never the tip
   }
 });
 
+// A pull_request run checks out GitHub's merge ref (refs/pull/N/merge), which GitHub
+// builds on the base tip it last saw, while `pull_request.base.sha` (the job's
+// GSD_EMITTED_BASE pin) can be older. The "Rebase check" merge of that older sha is then
+// a no-op, so `merge-base(pin, HEAD)` is the old sha and the measured range sweeps in
+// base-branch commits the PR never authored, with their ack trailers (PR #5119, run
+// 40129863190: 34 `next` commits, four keys "declared twice"). The fixture is that shape:
+// B0 = the stale pin, B1/B2 = base-only commits declaring one key with two reasons,
+// M = merge(B2 <- PR head) with B2 as its first parent, checked out detached.
+function makeStalePinMergeRefRepo(t) {
+  const root = createTempDir('gsd-stale-pin-merge-ref-');
+  t.after(() => cleanup(root));
+  gitFixture(root, ['init', '-q', '-b', 'next']);
+  fs.writeFileSync(path.join(root, 'shared.txt'), 'v0\n');
+  gitFixture(root, ['add', '-A']);
+  gitFixture(root, ['commit', '-q', '-m', 'B0: the base sha the PR event recorded']);
+  const b0 = gitFixture(root, ['rev-parse', 'HEAD']);
+
+  gitFixture(root, ['checkout', '-q', '-b', 'pr']);
+  fs.writeFileSync(path.join(root, 'pr-only.txt'), 'pr\n');
+  gitFixture(root, ['add', '-A']);
+  gitFixture(root, ['commit', '-q', '-m', 'the PR\'s own change']);
+
+  gitFixture(root, ['checkout', '-q', 'next']);
+  for (const [i, reason] of [[1, 'first reason'], [2, 'a different reason']]) {
+    fs.writeFileSync(path.join(root, 'shared.txt'), `v${i}\n`);
+    gitFixture(root, ['add', '-A']);
+    gitFixture(root, ['commit', '-q', '-m', `B${i}: base-only change`, '-m',
+      `Emitted-Drift-Ack-Growth: verify-work.md — ${reason}`]);
+  }
+  const b2 = gitFixture(root, ['rev-parse', 'HEAD']);
+
+  // What actions/checkout leaves on a pull_request run: the merge ref detached, the
+  // base branch only as a remote-tracking ref, no local branch of that name.
+  gitFixture(root, ['checkout', '-q', '--detach', b2]);
+  gitFixture(root, ['merge', '-q', '--no-ff', '--no-edit', 'pr']);
+  const mergeRef = gitFixture(root, ['rev-parse', 'HEAD']);
+  gitFixture(root, ['update-ref', 'refs/remotes/origin/next', b2]);
+  gitFixture(root, ['branch', '-q', '-D', 'next']);
+  return { root, b0, b2, mergeRef };
+}
+
+test('a stale pull_request base pin measures from the newest base commit the merge ref contains', (t) => {
+  const { root, b0, b2, mergeRef } = makeStalePinMergeRefRepo(t);
+  assert.equal(gitFixture(root, ['rev-parse', `${mergeRef}^1`]), b2, 'fixture: the merge ref is built on B2');
+
+  const base = resolveAttributionBase({ GSD_EMITTED_BASE: b0, GITHUB_BASE_REF: 'next' }, { cwd: root });
+  assert.equal(base.sha, b2,
+    'the attribution base must be the newest base-branch commit HEAD contains (B2), not the stale pin (B0)');
+
+  // The #5008 single-origin wiring: the changed-path range and the ack-trailer range both
+  // move with the base, so neither sees the base-only commits.
+  const { changedPaths, ack } = resolveAttributionInputs(base, {
+    cwd: root,
+    resolveBaselineFn: () => ({ ok: true, via: 'build', baseline: {} }),
+    readJson: () => null,
+  });
+  assert.deepEqual(changedPaths, ['pr-only.txt'], 'only the PR\'s own path may be in the changed set');
+  assert.deepEqual(ack.errors, [], 'base-only trailers must not reach the PR\'s ack range');
+  assert.deepEqual([...ack.growth.entries()], []);
+});
+
+test('the base advance is bounded: the pin holds off the PR lane, and a base tip HEAD lacks never counts', (t) => {
+  const { root, b0, b2 } = makeStalePinMergeRefRepo(t);
+
+  // No GITHUB_BASE_REF (a local run, a release lane, merge_group): the pin is the base.
+  assert.equal(resolveAttributionBase({ GSD_EMITTED_BASE: b0 }, { cwd: root }).sha, b0,
+    'without GITHUB_BASE_REF the explicit pin must be honored as is');
+
+  // The base branch advancing mid-run (a commit HEAD does not contain) cannot move it.
+  gitFixture(root, ['checkout', '-q', '-b', 'later', b2]);
+  fs.writeFileSync(path.join(root, 'shared.txt'), 'v3\n');
+  gitFixture(root, ['add', '-A']);
+  gitFixture(root, ['commit', '-q', '-m', 'B3: lands on next after the merge ref was built']);
+  const b3 = gitFixture(root, ['rev-parse', 'HEAD']);
+  gitFixture(root, ['checkout', '-q', '-']);
+  gitFixture(root, ['update-ref', 'refs/remotes/origin/next', b3]);
+  assert.equal(resolveAttributionBase({ GSD_EMITTED_BASE: b0, GITHUB_BASE_REF: 'next' }, { cwd: root }).sha, b2,
+    'a base commit HEAD does not contain must never become the attribution base');
+
+  // A remote-tracking ref that does not resolve leaves the pin's merge-base in place.
+  assert.equal(resolveAttributionBase({ GSD_EMITTED_BASE: b0, GITHUB_BASE_REF: 'no-such-branch' }, { cwd: root }).sha, b0);
+});
+
 // ─── The real thing: the law, run against the actual tree ───────────────────
 //
 // Everything above exercises the pure law against synthetic input, which is what makes
