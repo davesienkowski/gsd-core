@@ -1,0 +1,43 @@
+# Runs gsd-core's full npm test on an exact sha on a clean non-WSL runner, for a PR's Self-test report.
+# Lives alone on an orphan branch; change SELFTEST_SHA to run another commit.
+name: selftest
+on: push
+env:
+  SELFTEST_REPO: davesienkowski/gsd-core
+  SELFTEST_SHA: afd2a8911d917e466ffe4bc1b593046129f35464
+jobs:
+  full-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ env.SELFTEST_REPO }}
+          ref: ${{ env.SELFTEST_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Base ref for the emitted-attribution gate
+        run: |
+          git remote add upstream https://github.com/open-gsd/gsd-core.git
+          git fetch --quiet upstream next
+          git update-ref refs/remotes/upstream/next FETCH_HEAD
+      - run: npm ci
+      - name: Full suite
+        run: |
+          set +e
+          git rev-parse HEAD | tee head.txt
+          node --version | tee -a head.txt
+          uname -a | tee -a head.txt
+          npm test > npmtest.out 2>&1
+          echo "exit=$?" | tee -a head.txt
+          tail -40 npmtest.out
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: selftest
+          path: |
+            head.txt
+            npmtest.out
