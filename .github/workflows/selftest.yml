@@ -4,7 +4,7 @@ name: selftest
 on: push
 env:
   SELFTEST_REPO: davesienkowski/gsd-core
-  SELFTEST_SHA: afd2a8911d917e466ffe4bc1b593046129f35464
+  SELFTEST_SHA: 9b944e87625250f95e59363e192098abe4453b8c
 jobs:
   full-suite:
     runs-on: ubuntu-latest
